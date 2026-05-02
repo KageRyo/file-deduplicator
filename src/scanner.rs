@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
+#[derive(Clone)]
 pub struct FileInfo {
     pub path: PathBuf,
     pub size: u64,

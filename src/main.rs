@@ -1,12 +1,10 @@
-mod cli;
-mod scanner;
-mod hasher;
-mod duplicate;
-mod reporter;
-mod cleanup;
+use file_deduplicator::cli::{Cli, Commands};
+use file_deduplicator::duplicate;
+use file_deduplicator::reporter;
+use file_deduplicator::scanner;
+use file_deduplicator::cleanup;
 
 use clap::Parser;
-use cli::{Cli, Commands};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 
