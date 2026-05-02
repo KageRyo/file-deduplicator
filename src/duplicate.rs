@@ -47,3 +47,34 @@ pub fn find_duplicates(files: Vec<FileInfo>) -> Vec<DuplicateGroup> {
 
     duplicate_groups
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_find_duplicates() {
+        let dir = tempdir().unwrap();
+        let file1 = dir.path().join("file1");
+        let file2 = dir.path().join("file2");
+        let file3 = dir.path().join("file3");
+
+        fs::write(&file1, "same").unwrap();
+        fs::write(&file2, "same").unwrap();
+        fs::write(&file3, "different").unwrap();
+
+        let files = vec![
+            FileInfo { path: file1.clone(), size: 4 },
+            FileInfo { path: file2.clone(), size: 4 },
+            FileInfo { path: file3.clone(), size: 9 },
+        ];
+
+        let duplicates = find_duplicates(files);
+        assert_eq!(duplicates.len(), 1);
+        assert_eq!(duplicates[0].files.len(), 2);
+        assert!(duplicates[0].files.contains(&file1));
+        assert!(duplicates[0].files.contains(&file2));
+    }
+}
