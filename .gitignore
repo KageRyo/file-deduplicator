@@ -24,3 +24,6 @@ target
 # Added by cargo
 
 /target
+zig.tar.xz
+zig_bin/
+cc_wrapper.sh
