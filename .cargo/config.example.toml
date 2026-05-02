@@ -1,0 +1,5 @@
+# Optional local Cargo configuration.
+# Copy this file to .cargo/config.toml only if you need a custom linker locally.
+
+# [target.x86_64-unknown-linux-gnu]
+# linker = "/path/to/your/local/cc_wrapper.sh"
