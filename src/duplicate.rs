@@ -3,6 +3,9 @@ use std::path::PathBuf;
 use crate::scanner::FileInfo;
 use crate::hasher;
 
+use serde::Serialize;
+
+#[derive(Serialize)]
 pub struct DuplicateGroup {
     pub size: u64,
     pub hash: String,
