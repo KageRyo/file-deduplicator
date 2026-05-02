@@ -12,44 +12,62 @@ pub struct DuplicateGroup {
     pub files: Vec<PathBuf>,
 }
 
-pub fn find_duplicates(files: Vec<FileInfo>) -> Vec<DuplicateGroup> {
+use indicatif::ProgressBar;
+
+use rayon::prelude::*;
+
+pub fn find_duplicates(files: Vec<FileInfo>, pb: Option<&ProgressBar>) -> Vec<DuplicateGroup> {
     // 1. Group by size
     let mut size_groups: HashMap<u64, Vec<PathBuf>> = HashMap::new();
     for file in files {
         size_groups.entry(file.size).or_default().push(file.path);
     }
 
-    // 2. Filter candidate groups (size matching)
-    let candidates: Vec<(u64, Vec<PathBuf>)> = size_groups
+    // 2. Filter candidates
+    let candidates: Vec<(u64, PathBuf)> = size_groups
         .into_iter()
         .filter(|(_, paths)| paths.len() > 1)
+        .flat_map(|(size, paths)| paths.into_iter().map(move |path| (size, path)))
         .collect();
 
-    let mut duplicate_groups = Vec::new();
-
-    // 3. For each candidate group, group by hash
-    for (size, paths) in candidates {
-        let mut hash_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
-        for path in paths {
-            if let Ok(hash) = hasher::hash_file(&path) {
-                hash_groups.entry(hash).or_default().push(path);
-            }
-        }
-
-        // 4. Filter duplicates (hash matching)
-        for (hash, files) in hash_groups {
-            if files.len() > 1 {
-                duplicate_groups.push(DuplicateGroup {
-                    size,
-                    hash,
-                    files,
-                });
-            }
-        }
+    if candidates.is_empty() {
+        return Vec::new();
     }
 
-    duplicate_groups
+    if let Some(pb) = pb {
+        pb.set_length(candidates.len() as u64);
+    }
+
+    // 3. Hash candidates in parallel
+    let hashed_candidates: Vec<(u64, String, PathBuf)> = candidates
+        .into_par_iter()
+        .filter_map(|(size, path)| {
+            let res = hasher::hash_file(&path).ok().map(|hash| (size, hash, path));
+            if let Some(pb) = pb {
+                pb.inc(1);
+            }
+            res
+        })
+        .collect();
+
+    // 4. Group by (size, hash)
+    let mut duplicate_map: HashMap<(u64, String), Vec<PathBuf>> = HashMap::new();
+    for (size, hash, path) in hashed_candidates {
+        duplicate_map.entry((size, hash)).or_default().push(path);
+    }
+
+    // 5. Filter actual duplicates (count > 1)
+    duplicate_map
+        .into_iter()
+        .filter(|(_, files)| files.len() > 1)
+        .map(|((size, hash), files)| DuplicateGroup {
+            size,
+            hash,
+            files,
+        })
+        .collect()
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -74,7 +92,7 @@ mod tests {
             FileInfo { path: file3.clone(), size: 9 },
         ];
 
-        let duplicates = find_duplicates(files);
+        let duplicates = find_duplicates(files, None);
         assert_eq!(duplicates.len(), 1);
         assert_eq!(duplicates[0].files.len(), 2);
         assert!(duplicates[0].files.contains(&file1));
