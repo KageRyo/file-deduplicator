@@ -13,7 +13,8 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Scan { path } => {
             println!("Scanning: {:?}", path);
-            // TODO: implement scanning
+            let files = scanner::scan_dir(path);
+            println!("Found {} files.", files.len());
         }
     }
 
