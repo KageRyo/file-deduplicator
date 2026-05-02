@@ -15,6 +15,9 @@ fn main() -> anyhow::Result<()> {
             println!("Scanning: {:?}", path);
             let files = scanner::scan_dir(path);
             println!("Found {} files.", files.len());
+            
+            let duplicates = duplicate::find_duplicates(files);
+            reporter::report(&duplicates);
         }
     }
 
