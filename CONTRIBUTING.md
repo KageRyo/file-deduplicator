@@ -16,16 +16,24 @@ First off, thank you for considering contributing to File Deduplicator! It's peo
 
 ### Pull Requests
 
+We follow the **[GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow)**.
+
 1. **Fork the repo** and create your branch from `main`.
-2. **Install dependencies**.
-3. **Write tests** for your changes.
-4. **Ensure CI passes** locally by running:
+2. **Branch Naming**: Your branch name must follow these conventions:
+   - `feature/your-feature-name` (for new features)
+   - `fix/bug-description` (for bug fixes)
+   - `docs/documentation-changes` (for docs)
+   - `refactor/code-refactoring` (for refactoring)
+3. **Install dependencies**.
+4. **Write tests** for your changes.
+5. **Ensure CI passes** locally by running:
    ```bash
    cargo fmt --all -- --check
    cargo clippy -- -D warnings
    cargo test
    ```
-5. **Format your commit messages** using [Conventional Commits](https://www.conventionalcommits.org/).
+6. **Format your commit messages** using [Conventional Commits](https://www.conventionalcommits.org/).
+7. **Submit a Pull Request** to the `main` branch.
 
 ## Development Setup
 
