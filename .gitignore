@@ -27,3 +27,6 @@ target
 zig.tar.xz
 zig_bin/
 cc_wrapper.sh
+
+# Local Cargo config
+.cargo/config.toml
