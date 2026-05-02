@@ -1,8 +1,8 @@
-use std::fs;
-use std::path::Path;
 use crate::cli::KeepPolicy;
 use crate::duplicate::DuplicateGroup;
 use anyhow::{Context, Result};
+use std::fs;
+use std::path::Path;
 
 pub fn move_duplicates(groups: Vec<DuplicateGroup>, to_dir: &Path) -> Result<()> {
     if !to_dir.exists() {
@@ -15,9 +15,11 @@ pub fn move_duplicates(groups: Vec<DuplicateGroup>, to_dir: &Path) -> Result<()>
         println!("Keeping: {}", to_keep[0].display());
 
         for file in to_move {
-            let file_name = file.file_name().ok_or_else(|| anyhow::anyhow!("Invalid file name"))?;
+            let file_name = file
+                .file_name()
+                .ok_or_else(|| anyhow::anyhow!("Invalid file name"))?;
             let dest = to_dir.join(file_name);
-            
+
             // Handle collision in destination
             let mut final_dest = dest.clone();
             let mut count = 1;
@@ -36,10 +38,14 @@ pub fn move_duplicates(groups: Vec<DuplicateGroup>, to_dir: &Path) -> Result<()>
     Ok(())
 }
 
-pub fn delete_duplicates(groups: Vec<DuplicateGroup>, policy: KeepPolicy, dry_run: bool) -> Result<()> {
+pub fn delete_duplicates(
+    groups: Vec<DuplicateGroup>,
+    policy: KeepPolicy,
+    dry_run: bool,
+) -> Result<()> {
     for group in groups {
         let mut files = group.files.clone();
-        
+
         // Sort based on policy
         match policy {
             KeepPolicy::First => {

@@ -13,7 +13,7 @@ pub fn scan_dir(path: PathBuf, min_size: Option<u64>, exclude: &[String]) -> Vec
     for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file() {
             let path = entry.path();
-            
+
             // Check exclusion
             if exclude.iter().any(|ex| path.to_string_lossy().contains(ex)) {
                 continue;
@@ -21,12 +21,10 @@ pub fn scan_dir(path: PathBuf, min_size: Option<u64>, exclude: &[String]) -> Vec
 
             if let Ok(metadata) = entry.metadata() {
                 let size = metadata.len();
-                
+
                 // Check min size
-                if let Some(min) = min_size {
-                    if size < min {
-                        continue;
-                    }
+                if min_size.is_some_and(|min| size < min) {
+                    continue;
                 }
 
                 files.push(FileInfo {
@@ -42,7 +40,8 @@ pub fn scan_dir(path: PathBuf, min_size: Option<u64>, exclude: &[String]) -> Vec
 
 pub fn parse_size(s: &str) -> Option<u64> {
     let s = s.to_uppercase();
-    let (num_part, unit_part) = s.split_at(s.find(|c: char| !c.is_digit(10)).unwrap_or(s.len()));
+    let (num_part, unit_part) =
+        s.split_at(s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len()));
     let num: u64 = num_part.parse().ok()?;
 
     match unit_part.trim() {

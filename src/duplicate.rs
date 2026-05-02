@@ -1,7 +1,7 @@
+use crate::hasher;
+use crate::scanner::FileInfo;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::scanner::FileInfo;
-use crate::hasher;
 
 use serde::Serialize;
 
@@ -60,14 +60,9 @@ pub fn find_duplicates(files: Vec<FileInfo>, pb: Option<&ProgressBar>) -> Vec<Du
     duplicate_map
         .into_iter()
         .filter(|(_, files)| files.len() > 1)
-        .map(|((size, hash), files)| DuplicateGroup {
-            size,
-            hash,
-            files,
-        })
+        .map(|((size, hash), files)| DuplicateGroup { size, hash, files })
         .collect()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -87,9 +82,18 @@ mod tests {
         fs::write(&file3, "different").unwrap();
 
         let files = vec![
-            FileInfo { path: file1.clone(), size: 4 },
-            FileInfo { path: file2.clone(), size: 4 },
-            FileInfo { path: file3.clone(), size: 9 },
+            FileInfo {
+                path: file1.clone(),
+                size: 4,
+            },
+            FileInfo {
+                path: file2.clone(),
+                size: 4,
+            },
+            FileInfo {
+                path: file3.clone(),
+                size: 9,
+            },
         ];
 
         let duplicates = find_duplicates(files, None);

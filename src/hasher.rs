@@ -1,7 +1,7 @@
+use anyhow::Result;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use anyhow::Result;
 
 pub fn hash_file(path: &Path) -> Result<String> {
     let mut file = File::open(path)?;

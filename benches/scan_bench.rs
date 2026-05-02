@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use file_deduplicator::duplicate;
 use file_deduplicator::scanner::FileInfo;
 use std::fs;
@@ -27,11 +27,9 @@ fn setup_bench_data(num_files: usize, size: usize) -> (TempDir, Vec<FileInfo>) {
 
 fn bench_duplicate_detection(c: &mut Criterion) {
     let (_dir, files) = setup_bench_data(100, 1024 * 1024); // 100 files of 1MB each
-    
+
     c.bench_function("find_duplicates_100_files_1mb", |b| {
-        b.iter(|| {
-            duplicate::find_duplicates(files.clone(), None)
-        })
+        b.iter(|| duplicate::find_duplicates(files.clone(), None))
     });
 }
 
