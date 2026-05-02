@@ -1,56 +1,76 @@
-# File Deduplicator
+# File Deduplicator (dedup)
 
-A safe and fast Rust CLI tool for finding duplicate files using size-based filtering and content hashing.
+[![Rust CI](https://github.com/KageRyo/file-deduplicator/actions/workflows/ci.yml/badge.svg)](https://github.com/KageRyo/file-deduplicator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Features
+A high-performance, safe, and modern Rust CLI tool for finding and managing duplicate files. Designed for speed using size-based pre-filtering and parallel BLAKE3 hashing.
 
-- Recursively scan directories
-- Detect duplicate files using file size and BLAKE3 hashing
-- Estimate potential disk space savings
-- Skip unnecessary hashing by grouping files by size first
-- Parallel processing for high performance
-- Progress bar for visual feedback
+## 🚀 Key Features
 
-## Usage
+- **Blazing Fast**: Uses parallel processing (`Rayon`) and the cryptographic-grade `BLAKE3` hash for maximum throughput.
+- **Smart Filtering**: Avoids unnecessary hashing by grouping files by size first.
+- **Advanced CLI**: Filter by minimum size, exclude paths/patterns, and output results in human-readable or JSON formats.
+- **Safe Cleanup**: 
+    - `move`: Archive duplicates to a backup folder.
+    - `delete`: Securely remove files with `dry-run` and `confirm` safety checks.
+- **User-Friendly**: Interactive progress bars and detailed space-saving estimations.
+
+## 📦 Installation
 
 ```bash
-# Basic scan
-cargo run -- scan ./path/to/directory
-
-# Scan with filters
-cargo run -- scan ./path/to/directory --min-size 1MB --exclude node_modules
-
-# Output results in JSON
-cargo run -- scan ./path/to/directory --json
-
-# Move duplicates to a specific folder
-cargo run -- move ./path/to/directory --to ./duplicates_backup
-
-# Delete duplicates (Dry run)
-cargo run -- delete ./path/to/directory --dry-run
-
-# Delete duplicates (Confirm)
-cargo run -- delete ./path/to/directory --confirm --keep newest
+git clone https://github.com/KageRyo/file-deduplicator.git
+cd file-deduplicator
+cargo install --path .
 ```
 
-## How It Works
+## 🛠 Usage
 
-1. **Scan**: Recursively list all files in the target directory and collect their sizes.
-2. **Size Filter**: Group files by their size. Only files that share the same size are candidates for being duplicates.
-3. **Hashing**: Calculate the BLAKE3 hash only for files in groups with more than one file.
-4. **Duplicate Detection**: Group files by their hash. Any group with more than one file is a set of duplicates.
-5. **Report**: Output a human-readable report showing the duplicates and potential space savings.
+### 🔍 Scanning
+```bash
+# Basic scan of a directory
+dedup scan ./Downloads
 
-## Roadmap
+# Advanced scan with filters
+dedup scan ./project --min-size 1MB --exclude target --exclude .git
 
-- [x] Basic scanning and duplicate detection
-- [x] Size-based pre-filtering
-- [x] BLAKE3 hashing
-- [x] Human-readable reports
-- [x] Support for `--min-size` filter
-- [x] Support for `--exclude` paths
-- [x] JSON output support
-- [x] Parallel hashing using Rayon
-- [x] Safe cleanup (move or delete)
-- [x] Progress bar for visual feedback
-- [ ] Benchmark suite
+# Export to JSON for post-processing
+dedup scan ./images --json > report.json
+```
+
+### 📁 Management
+```bash
+# Move duplicates to a backup directory
+dedup move ./Downloads --to ./duplicates_backup
+
+# Delete duplicates with a specific policy (first | newest | oldest)
+dedup delete ./Downloads --dry-run
+dedup delete ./Downloads --confirm --keep newest
+```
+
+## ⚙️ How It Works (Architecture)
+
+1. **Scanner Phase**: Recursively traverses directories using `WalkDir`, collecting file metadata (paths and sizes).
+2. **Size Filter**: Groups files by their exact byte count. Only size-identical files are considered candidates.
+3. **Parallel Hashing**: Hashing is performed in parallel across available CPU cores. Small segments of the file are streamed into the `BLAKE3` hasher to keep memory usage low.
+4. **Duplicate Grouping**: Files with matching size AND hash are grouped.
+5. **Reporter**: Calculates potential disk space savings and presents the results.
+
+## 📊 Performance
+
+By combining size-based pre-filtering with parallel BLAKE3, `dedup` significantly outperforms naive "hash-everything" tools, especially on directories with large media files.
+
+| Strategy | Speed | Resource Usage |
+| :--- | :--- | :--- |
+| **Naive Hash-All** | Slow (I/O bound) | High Disk I/O |
+| **Size-First + BLAKE3** | **Ultra Fast** | **Optimized I/O** |
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+Built with ❤️ by [KageRyo](https://github.com/KageRyo)
