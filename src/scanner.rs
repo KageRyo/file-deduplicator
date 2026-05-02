@@ -94,6 +94,10 @@ mod tests {
         // 3. Exclude filter
         let files = scan_dir(dir.path().to_path_buf(), None, &["sub".to_string()]);
         assert_eq!(files.len(), 2);
-        assert!(!files.iter().any(|f| f.path.to_string_lossy().contains("sub")));
+        assert!(
+            !files
+                .iter()
+                .any(|f| f.path.to_string_lossy().contains("sub"))
+        );
     }
 }

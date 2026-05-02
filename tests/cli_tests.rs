@@ -1,8 +1,8 @@
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
+use std::fs;
 use std::process::Command;
 use tempfile::tempdir;
-use std::fs;
 
 #[test]
 fn test_scan_invalid_size() -> Result<(), Box<dyn std::error::Error>> {
@@ -43,7 +43,7 @@ fn test_delete_dry_run() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("[DRY RUN] Would delete:"));
-    
+
     assert!(f1.exists());
     assert!(f2.exists());
     Ok(())

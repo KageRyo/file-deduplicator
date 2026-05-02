@@ -71,8 +71,7 @@ fn run_scan(
 ) -> anyhow::Result<Vec<duplicate::DuplicateGroup>> {
     let min_size_bytes = match min_size {
         Some(s) => Some(
-            scanner::parse_size(&s)
-                .ok_or_else(|| anyhow::anyhow!("Invalid size format: {}", s))?,
+            scanner::parse_size(&s).ok_or_else(|| anyhow::anyhow!("Invalid size format: {}", s))?,
         ),
         None => None,
     };

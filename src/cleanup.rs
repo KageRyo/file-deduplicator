@@ -79,10 +79,10 @@ pub fn delete_duplicates(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
-    use std::time::Duration;
     use std::thread;
+    use std::time::Duration;
+    use tempfile::tempdir;
 
     #[test]
     fn test_move_duplicates() {
@@ -136,7 +136,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let file_old = dir.path().join("old");
         let file_new = dir.path().join("new");
-        
+
         fs::write(&file_old, "content").unwrap();
         // Wait a bit to ensure different modification times
         thread::sleep(Duration::from_millis(100));
@@ -149,7 +149,7 @@ mod tests {
         };
 
         delete_duplicates(vec![group], KeepPolicy::Newest, false).unwrap();
-        
+
         assert!(file_new.exists()); // Kept newest
         assert!(!file_old.exists()); // Deleted oldest
     }
