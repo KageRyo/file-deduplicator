@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct DuplicateGroup {
     pub size: u64,
     pub hash: String,

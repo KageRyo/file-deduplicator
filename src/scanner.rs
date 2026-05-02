@@ -53,3 +53,47 @@ pub fn parse_size(s: &str) -> Option<u64> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_parse_size() {
+        assert_eq!(parse_size("1KB"), Some(1024));
+        assert_eq!(parse_size("2MB"), Some(2 * 1024 * 1024));
+        assert_eq!(parse_size("1GB"), Some(1024 * 1024 * 1024));
+        assert_eq!(parse_size("123"), Some(123));
+        assert_eq!(parse_size("abc"), None);
+    }
+
+    #[test]
+    fn test_scan_dir() {
+        let dir = tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+
+        let file1 = dir.path().join("file1.txt");
+        let file2 = sub.join("file2.txt");
+        let file3 = dir.path().join("small.txt");
+
+        fs::write(&file1, "large content").unwrap(); // 13 bytes
+        fs::write(&file2, "large content").unwrap(); // 13 bytes
+        fs::write(&file3, "tiny").unwrap(); // 4 bytes
+
+        // 1. Basic scan
+        let files = scan_dir(dir.path().to_path_buf(), None, &[]);
+        assert_eq!(files.len(), 3);
+
+        // 2. Min size filter
+        let files = scan_dir(dir.path().to_path_buf(), Some(10), &[]);
+        assert_eq!(files.len(), 2);
+
+        // 3. Exclude filter
+        let files = scan_dir(dir.path().to_path_buf(), None, &["sub".to_string()]);
+        assert_eq!(files.len(), 2);
+        assert!(!files.iter().any(|f| f.path.to_string_lossy().contains("sub")));
+    }
+}

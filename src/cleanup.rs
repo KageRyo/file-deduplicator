@@ -75,3 +75,82 @@ pub fn delete_duplicates(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use std::fs;
+    use std::time::Duration;
+    use std::thread;
+
+    #[test]
+    fn test_move_duplicates() {
+        let dir = tempdir().unwrap();
+        let to_dir = tempdir().unwrap();
+        let file1 = dir.path().join("f1");
+        let file2 = dir.path().join("f2");
+        fs::write(&file1, "content").unwrap();
+        fs::write(&file2, "content").unwrap();
+
+        let group = DuplicateGroup {
+            size: 7,
+            hash: "h".to_string(),
+            files: vec![file1.clone(), file2.clone()],
+        };
+
+        move_duplicates(vec![group], to_dir.path()).unwrap();
+
+        assert!(file1.exists()); // Kept
+        assert!(!file2.exists()); // Moved
+        assert!(to_dir.path().join("f2").exists());
+    }
+
+    #[test]
+    fn test_delete_duplicates_safety() {
+        let dir = tempdir().unwrap();
+        let file1 = dir.path().join("f1");
+        let file2 = dir.path().join("f2");
+        fs::write(&file1, "content").unwrap();
+        fs::write(&file2, "content").unwrap();
+
+        let group = DuplicateGroup {
+            size: 7,
+            hash: "h".to_string(),
+            files: vec![file1.clone(), file2.clone()],
+        };
+
+        // Dry run
+        delete_duplicates(vec![group.clone()], KeepPolicy::First, true).unwrap();
+        assert!(file1.exists());
+        assert!(file2.exists());
+
+        // Actual delete
+        delete_duplicates(vec![group], KeepPolicy::First, false).unwrap();
+        assert!(file1.exists()); // Kept
+        assert!(!file2.exists()); // Deleted
+    }
+
+    #[test]
+    fn test_delete_keep_newest() {
+        let dir = tempdir().unwrap();
+        let file_old = dir.path().join("old");
+        let file_new = dir.path().join("new");
+        
+        fs::write(&file_old, "content").unwrap();
+        // Wait a bit to ensure different modification times
+        thread::sleep(Duration::from_millis(100));
+        fs::write(&file_new, "content").unwrap();
+
+        let group = DuplicateGroup {
+            size: 7,
+            hash: "h".to_string(),
+            files: vec![file_old.clone(), file_new.clone()],
+        };
+
+        delete_duplicates(vec![group], KeepPolicy::Newest, false).unwrap();
+        
+        assert!(file_new.exists()); // Kept newest
+        assert!(!file_old.exists()); // Deleted oldest
+    }
+}

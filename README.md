@@ -15,6 +15,10 @@ A high-performance, safe, and modern Rust CLI tool for finding and managing dupl
     - `delete`: Securely remove files with `dry-run` and `confirm` safety checks.
 - **User-Friendly**: Interactive progress bars and detailed space-saving estimations.
 
+## 🛡 Current Status
+
+This project is under active development. The core scan, duplicate detection, JSON output, move, and delete workflows are implemented and verified with comprehensive unit and integration tests.
+
 ## 📦 Installation
 
 ```bash

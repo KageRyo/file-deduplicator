@@ -69,7 +69,13 @@ fn run_scan(
     exclude: Vec<String>,
     quiet: bool,
 ) -> anyhow::Result<Vec<duplicate::DuplicateGroup>> {
-    let min_size_bytes = min_size.and_then(|s| scanner::parse_size(&s));
+    let min_size_bytes = match min_size {
+        Some(s) => Some(
+            scanner::parse_size(&s)
+                .ok_or_else(|| anyhow::anyhow!("Invalid size format: {}", s))?,
+        ),
+        None => None,
+    };
 
     if !quiet {
         println!("Scanning: {:?}", path);
