@@ -2,7 +2,6 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use file_deduplicator::duplicate;
 use file_deduplicator::scanner::FileInfo;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 fn setup_bench_data(num_files: usize, size: usize) -> (TempDir, Vec<FileInfo>) {
