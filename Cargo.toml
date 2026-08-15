@@ -3,9 +3,14 @@ name = "file-deduplicator"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "dedup"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 walkdir = "2"
+globset = "0.4"
 blake3 = "1"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
@@ -18,6 +23,9 @@ tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 assert_cmd = "2"
 predicates = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [[bench]]
 name = "scan_bench"

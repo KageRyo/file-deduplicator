@@ -1,8 +1,17 @@
+#![allow(dead_code, unused_imports)]
+
 use criterion::{Criterion, criterion_group, criterion_main};
-use file_deduplicator::duplicate;
-use file_deduplicator::scanner::FileInfo;
 use std::fs;
 use tempfile::TempDir;
+
+#[path = "../src/duplicate.rs"]
+mod duplicate;
+#[path = "../src/hasher.rs"]
+mod hasher;
+#[path = "../src/scanner.rs"]
+mod scanner;
+
+use scanner::FileInfo;
 
 fn setup_bench_data(num_files: usize, size: usize) -> (TempDir, Vec<FileInfo>) {
     let dir = TempDir::new().unwrap();
@@ -16,10 +25,7 @@ fn setup_bench_data(num_files: usize, size: usize) -> (TempDir, Vec<FileInfo>) {
             vec![1u8; size]
         };
         fs::write(&path, content).unwrap();
-        files.push(FileInfo {
-            path,
-            size: size as u64,
-        });
+        files.push(FileInfo::from_path(&path).unwrap());
     }
     (dir, files)
 }

@@ -1,4 +1,6 @@
 use crate::duplicate::DuplicateGroup;
+use crate::duplicate::DuplicateResult;
+use crate::scanner::ScanReport;
 
 pub fn report(groups: &[DuplicateGroup]) {
     let mut total_saved_space = 0;
@@ -19,6 +21,32 @@ pub fn report(groups: &[DuplicateGroup]) {
 
     println!("Found {} duplicate groups.", groups.len());
     println!("Potential space saved: {}", format_size(total_saved_space));
+}
+
+pub fn report_scan_summary(scan: &ScanReport, duplicates: &DuplicateResult) {
+    let summary = scan.summary(duplicates.candidates_hashed, duplicates.hash_errors.len());
+    eprintln!(
+        "Scan summary: {} files scanned, {} skipped, {} scan failures, {} hash failures.",
+        summary.files_scanned, summary.files_skipped, summary.scan_failures, summary.hash_failures
+    );
+
+    for error in &scan.errors {
+        let path = error
+            .path
+            .as_deref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "<unknown path>".to_string());
+        eprintln!(
+            "Scan error [{}] {}: {}",
+            error.kind_as_str(),
+            path,
+            error.message
+        );
+    }
+
+    for error in &duplicates.hash_errors {
+        eprintln!("Hash error {}: {}", error.path.display(), error.message);
+    }
 }
 
 fn format_size(size: u64) -> String {
