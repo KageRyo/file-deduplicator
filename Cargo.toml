@@ -2,6 +2,14 @@
 name = "file-deduplicator"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85.0"
+description = "Find and safely manage duplicate files from the command line."
+license = "MIT"
+repository = "https://github.com/KageRyo/file-deduplicator"
+readme = "README.md"
+keywords = ["deduplication", "duplicate-files", "file-management", "cli"]
+categories = ["command-line-utilities", "filesystem"]
+include = ["Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "src/**"]
 
 [[bin]]
 name = "dedup"
@@ -10,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 walkdir = "2"
-globset = "0.4"
+globset = "=0.4.18"
 blake3 = "1"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
