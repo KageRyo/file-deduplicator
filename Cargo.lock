@@ -387,6 +387,7 @@ dependencies = [
  "libc",
  "predicates",
  "rayon",
+ "same-file",
  "serde",
  "serde_json",
  "tempfile",

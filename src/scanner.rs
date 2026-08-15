@@ -10,7 +10,7 @@ use walkdir::{Error as WalkDirError, WalkDir};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
+use std::sync::Arc;
 
 /// The filesystem identity captured for a scanned file.
 ///
@@ -27,10 +27,7 @@ pub enum PhysicalFileId {
         inode: u64,
     },
     #[cfg(windows)]
-    Windows {
-        volume_serial_number: u32,
-        file_index: u64,
-    },
+    Windows(Arc<same_file::Handle>),
     Path(PathBuf),
 }
 
@@ -48,7 +45,7 @@ impl FileInfo {
             path: path.to_path_buf(),
             size: metadata.len(),
             modified: metadata.modified()?,
-            identity: physical_file_id(path, metadata),
+            identity: physical_file_id(path, metadata)?,
         })
     }
 
@@ -64,32 +61,28 @@ impl FileInfo {
     }
 }
 
-fn physical_file_id(_path: &Path, metadata: &Metadata) -> PhysicalFileId {
+fn physical_file_id(path: &Path, metadata: &Metadata) -> io::Result<PhysicalFileId> {
     #[cfg(unix)]
     {
-        PhysicalFileId::Unix {
+        let _ = path;
+        Ok(PhysicalFileId::Unix {
             device: metadata.dev(),
             inode: metadata.ino(),
-        }
+        })
     }
 
     #[cfg(windows)]
     {
-        if let (Some(volume_serial_number), Some(file_index)) =
-            (metadata.volume_serial_number(), metadata.file_index())
-        {
-            PhysicalFileId::Windows {
-                volume_serial_number,
-                file_index,
-            }
-        } else {
-            PhysicalFileId::Path(_path.to_path_buf())
-        }
+        let _ = metadata;
+        same_file::Handle::from_path(path)
+            .map(Arc::new)
+            .map(PhysicalFileId::Windows)
     }
 
     #[cfg(not(any(unix, windows)))]
     {
-        PhysicalFileId::Path(_path.to_path_buf())
+        let _ = metadata;
+        Ok(PhysicalFileId::Path(path.to_path_buf()))
     }
 }
 
