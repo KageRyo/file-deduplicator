@@ -48,6 +48,11 @@ attempting an automated release. The workflow uses GitHub Actions OIDC and a
 short-lived publish credential; it does not use a long-lived registry token
 stored as a repository secret.
 
+The GitHub Actions publish job uses the `crates.io` environment and links it to
+the crate page at https://crates.io/crates/file-deduplicator. Configure the
+crates.io Trusted Publisher with the same optional environment name,
+`crates.io`, so the OIDC publisher restriction matches the workflow.
+
 If Trusted Publishing has not been configured, do not push a release tag
 expecting the workflow to publish. Use the documented manual process instead.
 
@@ -65,4 +70,5 @@ For a later version:
 The workflow has an explicit v0.1.0 guard so that an accidental v0.1.0 tag
 cannot trigger a publish attempt before Trusted Publishing was configured.
 For later tags, the GitHub Release job runs only after the crates.io publish
-job succeeds.
+job succeeds. Its title is formatted as `file-deduplicator vX.Y.Z`, while the
+Git tag remains `vX.Y.Z` for Cargo and workflow version validation.
