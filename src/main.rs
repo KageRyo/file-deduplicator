@@ -1,14 +1,31 @@
-use file_deduplicator::cleanup;
-use file_deduplicator::cli::{Cli, Commands};
-use file_deduplicator::duplicate;
-use file_deduplicator::reporter;
-use file_deduplicator::scanner;
+mod cleanup;
+mod cli;
+mod duplicate;
+mod hasher;
+mod reporter;
+mod scanner;
 
+use anyhow::Result;
 use clap::Parser;
+use cli::{Cli, Commands};
 use indicatif::{ProgressBar, ProgressStyle};
+use serde::Serialize;
 use std::path::PathBuf;
 
-fn main() -> anyhow::Result<()> {
+struct ScanOutcome {
+    scan: scanner::ScanReport,
+    duplicates: duplicate::DuplicateResult,
+}
+
+#[derive(Serialize)]
+struct JsonScanOutput<'a> {
+    summary: scanner::ScanSummary,
+    duplicate_groups: &'a [duplicate::DuplicateGroup],
+    scan_errors: &'a [scanner::ScanError],
+    hash_errors: &'a [duplicate::HashError],
+}
+
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -18,24 +35,36 @@ fn main() -> anyhow::Result<()> {
             exclude,
             json,
         } => {
-            let duplicates = run_scan(path, min_size, exclude, json)?;
+            let outcome = run_scan(path, min_size, exclude, json)?;
             if json {
-                println!("{}", serde_json::to_string_pretty(&duplicates)?);
+                let output = JsonScanOutput {
+                    summary: outcome.scan.summary(
+                        outcome.duplicates.candidates_hashed,
+                        outcome.duplicates.hash_errors.len(),
+                    ),
+                    duplicate_groups: &outcome.duplicates.groups,
+                    scan_errors: &outcome.scan.errors,
+                    hash_errors: &outcome.duplicates.hash_errors,
+                };
+                println!("{}", serde_json::to_string_pretty(&output)?);
             } else {
-                reporter::report(&duplicates);
+                reporter::report(&outcome.duplicates.groups);
             }
         }
         Commands::Move {
             path,
             to,
+            dry_run,
             min_size,
             exclude,
         } => {
-            let duplicates = run_scan(path, min_size, exclude, false)?;
-            if duplicates.is_empty() {
+            let outcome = run_scan(path, min_size, exclude, false)?;
+            ensure_complete(&outcome, "move")?;
+            if outcome.duplicates.groups.is_empty() {
                 println!("No duplicates found.");
             } else {
-                cleanup::move_duplicates(duplicates, &to)?;
+                let report = cleanup::move_duplicates(outcome.duplicates.groups, &to, dry_run)?;
+                finish_cleanup_report(report, "move")?;
             }
         }
         Commands::Delete {
@@ -51,11 +80,13 @@ fn main() -> anyhow::Result<()> {
                     "You must use --confirm to delete files, or use --dry-run to see what would happen."
                 );
             }
-            let duplicates = run_scan(path, min_size, exclude, false)?;
-            if duplicates.is_empty() {
+            let outcome = run_scan(path, min_size, exclude, false)?;
+            ensure_complete(&outcome, "delete")?;
+            if outcome.duplicates.groups.is_empty() {
                 println!("No duplicates found.");
             } else {
-                cleanup::delete_duplicates(duplicates, keep, dry_run)?;
+                let report = cleanup::delete_duplicates(outcome.duplicates.groups, keep, dry_run)?;
+                finish_cleanup_report(report, "delete")?;
             }
         }
     }
@@ -68,43 +99,66 @@ fn run_scan(
     min_size: Option<String>,
     exclude: Vec<String>,
     quiet: bool,
-) -> anyhow::Result<Vec<duplicate::DuplicateGroup>> {
+) -> Result<ScanOutcome> {
     let min_size_bytes = match min_size {
-        Some(s) => Some(
-            scanner::parse_size(&s).ok_or_else(|| anyhow::anyhow!("Invalid size format: {}", s))?,
+        Some(value) => Some(
+            scanner::parse_size(&value)
+                .ok_or_else(|| anyhow::anyhow!("Invalid size format: {value}"))?,
         ),
         None => None,
     };
 
     if !quiet {
-        println!("Scanning: {:?}", path);
+        eprintln!("Scanning: {:?}", path);
     }
 
-    let files = scanner::scan_dir(path, min_size_bytes, &exclude);
+    let scan = scanner::scan_dir(path, min_size_bytes, &exclude)?;
 
-    if !quiet {
-        println!("Found {} files.", files.len());
-    }
-
-    let pb = if !quiet {
-        let pb = ProgressBar::new(0);
-        pb.set_style(
+    let progress = if quiet {
+        None
+    } else {
+        let progress = ProgressBar::new(0);
+        progress.set_style(
             ProgressStyle::default_bar()
                 .template(
                     "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
                 )?
                 .progress_chars("#>-"),
         );
-        Some(pb)
-    } else {
-        None
+        Some(progress)
     };
 
-    let duplicates = duplicate::find_duplicates(files, pb.as_ref());
+    let duplicates = duplicate::find_duplicates(scan.files.clone(), progress.as_ref());
 
-    if let Some(pb) = pb {
-        pb.finish_and_clear();
+    if let Some(progress) = progress {
+        progress.finish_and_clear();
     }
 
-    Ok(duplicates)
+    if !quiet {
+        reporter::report_scan_summary(&scan, &duplicates);
+    }
+
+    Ok(ScanOutcome { scan, duplicates })
+}
+
+fn ensure_complete(outcome: &ScanOutcome, operation: &str) -> Result<()> {
+    if outcome.scan.is_complete() && outcome.duplicates.is_complete() {
+        return Ok(());
+    }
+
+    anyhow::bail!(
+        "Refusing to {operation}: scan is incomplete ({} scan failures, {} hash failures); no destructive operation was started.",
+        outcome.scan.errors.len(),
+        outcome.duplicates.hash_errors.len()
+    )
+}
+
+fn finish_cleanup_report(report: cleanup::CleanupReport, operation: &str) -> Result<()> {
+    if report.has_skipped_files() {
+        anyhow::bail!(
+            "{operation} skipped {} file(s) after revalidation; changed files were not removed or moved.",
+            report.skipped.len()
+        );
+    }
+    Ok(())
 }

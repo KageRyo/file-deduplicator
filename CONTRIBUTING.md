@@ -1,50 +1,73 @@
 # Contributing to File Deduplicator
 
-First off, thank you for considering contributing to File Deduplicator! It's people like you that make the open-source community such an amazing place.
+Thank you for helping improve File Deduplicator. Please open an issue for
+larger changes before starting implementation so the intended behavior can be
+discussed openly.
 
-## How Can I Contribute?
+## Development setup
 
-### Reporting Bugs
+The package uses Rust edition 2024 and supports Rust 1.85.0 or newer. Install
+the stable toolchain, then run the CLI from the repository with Cargo.
 
-- Check the [Issues tab](https://github.com/KageRyo/file-deduplicator/issues) to see if the bug has already been reported.
-- If not, open a new issue. Include a clear title, a description of the problem, and steps to reproduce it.
+Before opening a pull request, run:
 
-### Suggesting Enhancements
+~~~bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+~~~
 
-- Open a new issue with the tag "enhancement".
-- Describe the feature you'd like to see and why it would be useful.
+The package and release checks are:
 
-### Pull Requests
+~~~bash
+cargo package --list
+cargo publish --dry-run
+~~~
 
-We follow the **[GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow)**.
+These commands validate the package without publishing it. Do not put
+registry credentials in the repository, source files, workflow files, issue
+comments, or pull requests.
 
-1. **Fork the repo** and create your branch from `main`.
-2. **Branch Naming**: Your branch name must follow these conventions:
-   - `feature/your-feature-name` (for new features)
-   - `fix/bug-description` (for bug fixes)
-   - `docs/documentation-changes` (for docs)
-   - `refactor/code-refactoring` (for refactoring)
-3. **Install dependencies**.
-4. **Write tests** for your changes.
-5. **Ensure CI passes** locally by running:
-   ```bash
-   cargo fmt --all -- --check
-   cargo clippy -- -D warnings
-   cargo test
-   ```
-6. **Format your commit messages** using [Conventional Commits](https://www.conventionalcommits.org/).
-7. **Submit a Pull Request** to the `main` branch.
+## Dependency security audit
 
-## Development Setup
+The CI security job checks Cargo.lock against RustSec advisories. To run the
+same check locally, install cargo-audit once and then run:
 
-- Ensure you have the latest stable Rust toolchain installed.
-- To run benchmarks: `cargo bench`.
+~~~bash
+cargo install cargo-audit --locked
+cargo audit
+~~~
 
-## Style Guide
+An advisory failure is intentional CI failure and should be investigated
+before merging. If an advisory is not immediately actionable, document the
+reason and remediation plan in the relevant issue or pull request.
 
-- We follow the standard Rust style. Run `cargo fmt` before committing.
-- Document public functions and modules where appropriate.
+## GitHub Flow
+
+Changes are developed on a branch based on main and merged through a pull
+request:
+
+1. Create a focused branch such as feature/name, fix/name, docs/name, or
+   chore/name.
+2. Add or update tests for behavior changes.
+3. Keep commits focused and use
+   [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/),
+   for example fix: reject incomplete scans.
+4. Push the branch and open a pull request targeting main.
+5. Wait for the Linux, Windows, and macOS checks before requesting review.
+
+Do not merge your own pull request unless the project maintainers ask you to
+do so.
+
+## Filesystem safety
+
+Tests for move and delete behavior must use temporary directories created by
+the test itself. They must not operate on repository files or paths outside
+their temporary test directory. Add regression coverage when changing
+revalidation, hard-link handling, collision naming, exclusions, or
+cross-filesystem move behavior.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the
+MIT License.

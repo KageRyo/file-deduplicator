@@ -3,7 +3,8 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "dedup")]
-#[command(about = "A safe and fast Rust CLI tool for finding duplicate files", long_about = None)]
+#[command(version)]
+#[command(about = "Find and safely manage duplicate files", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -37,6 +38,10 @@ pub enum Commands {
         /// Destination directory for duplicates
         #[arg(short, long)]
         to: PathBuf,
+
+        /// Show planned moves without changing the filesystem
+        #[arg(long)]
+        dry_run: bool,
 
         /// Minimum file size to consider
         #[arg(long)]
@@ -74,9 +79,12 @@ pub enum Commands {
     },
 }
 
-#[derive(clap::ValueEnum, Clone, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KeepPolicy {
+    /// Keep the lexicographically smallest path in each duplicate group
     First,
+    /// Keep the file with the newest modification time
     Newest,
+    /// Keep the file with the oldest modification time
     Oldest,
 }
