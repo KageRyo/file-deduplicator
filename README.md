@@ -1,6 +1,7 @@
 # File Deduplicator (dedup)
 
 [![Rust CI](https://github.com/KageRyo/file-deduplicator/actions/workflows/ci.yml/badge.svg)](https://github.com/KageRyo/file-deduplicator/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/file-deduplicator.svg)](https://crates.io/crates/file-deduplicator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 dedup is a command-line tool for finding duplicate files and either
