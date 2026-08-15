@@ -3,7 +3,7 @@ name: Publish to crates.io
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -24,6 +24,11 @@ jobs:
 
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify tag matches package version
+        run: |
+          package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          test "v${package_version}" = "${GITHUB_REF_NAME}"
 
       - name: Validate package
         run: cargo publish --dry-run --locked
