@@ -43,6 +43,10 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
 
+        /// Keep policy
+        #[arg(long, value_enum, default_value_t = KeepPolicy::First)]
+        keep: KeepPolicy,
+
         /// Minimum file size to consider
         #[arg(long)]
         min_size: Option<String>,

@@ -419,4 +419,21 @@ mod tests {
         assert_eq!(report.files.len(), 2);
         assert_eq!(report.files[0].identity, report.files[1].identity);
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn symlinks_are_not_followed() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("target");
+        let link = dir.path().join("link");
+        fs::write(&target, b"content").unwrap();
+        symlink(&target, &link).unwrap();
+
+        let report = scan_dir(dir.path().to_path_buf(), None, &[]).unwrap();
+
+        assert_eq!(report.files.len(), 1);
+        assert_eq!(report.files[0].path, target);
+    }
 }

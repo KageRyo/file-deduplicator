@@ -43,9 +43,10 @@ struct GroupMovePlan {
 pub fn move_duplicates(
     groups: Vec<DuplicateGroup>,
     to_dir: &Path,
+    policy: KeepPolicy,
     dry_run: bool,
 ) -> Result<CleanupReport> {
-    let plans = build_move_plans(&groups, to_dir)?;
+    let plans = build_move_plans(&groups, to_dir, policy)?;
     let mut report = CleanupReport::default();
 
     for plan in plans {
@@ -252,12 +253,16 @@ fn same_snapshot(expected: &FileInfo, actual: &FileInfo) -> bool {
         && expected.identity == actual.identity
 }
 
-fn build_move_plans(groups: &[DuplicateGroup], to_dir: &Path) -> Result<Vec<GroupMovePlan>> {
+fn build_move_plans(
+    groups: &[DuplicateGroup],
+    to_dir: &Path,
+    policy: KeepPolicy,
+) -> Result<Vec<GroupMovePlan>> {
     let mut reserved = HashSet::new();
     let mut plans = Vec::new();
 
     for group in groups {
-        let entries = ordered_entries(group, KeepPolicy::First);
+        let entries = ordered_entries(group, policy);
         let mut moves = Vec::new();
         for source in entries.iter().skip(1) {
             let file_name = source
@@ -461,7 +466,7 @@ mod tests {
         fs::write(&file2, "content").unwrap();
 
         let group = group_for(&[&file1, &file2]);
-        let report = move_duplicates(vec![group], to_dir.path(), false).unwrap();
+        let report = move_duplicates(vec![group], to_dir.path(), KeepPolicy::First, false).unwrap();
 
         assert_eq!(report.completed, 1);
         assert!(file1.exists());
@@ -479,7 +484,7 @@ mod tests {
         fs::write(&file2, "content").unwrap();
 
         let group = group_for(&[&file1, &file2]);
-        let report = move_duplicates(vec![group], &destination, true).unwrap();
+        let report = move_duplicates(vec![group], &destination, KeepPolicy::First, true).unwrap();
 
         assert_eq!(report.completed, 0);
         assert!(report.skipped.is_empty());
@@ -566,6 +571,26 @@ mod tests {
         let entries = ordered_entries(&group, KeepPolicy::First);
 
         assert_eq!(entries[0].path, smallest);
+    }
+
+    #[test]
+    fn move_keep_newest_preserves_the_newest_file() {
+        let dir = tempdir().unwrap();
+        let destination = dir.path().join("destination");
+        let old = dir.path().join("old");
+        let new = dir.path().join("new");
+
+        fs::write(&old, "content").unwrap();
+        thread::sleep(Duration::from_millis(100));
+        fs::write(&new, "content").unwrap();
+
+        let group = group_for(&[&old, &new]);
+        let report = move_duplicates(vec![group], &destination, KeepPolicy::Newest, false).unwrap();
+
+        assert_eq!(report.completed, 1);
+        assert!(new.exists());
+        assert!(!old.exists());
+        assert!(destination.join("old").exists());
     }
 
     #[test]

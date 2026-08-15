@@ -11,6 +11,12 @@ use cli::{Cli, Commands};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
 use std::path::PathBuf;
+use std::process::ExitCode;
+
+const EXIT_SUCCESS: u8 = 0;
+const EXIT_GENERAL_ERROR: u8 = 1;
+const EXIT_INCOMPLETE_SCAN: u8 = 2;
+const EXIT_PARTIAL_CLEANUP: u8 = 3;
 
 struct ScanOutcome {
     scan: scanner::ScanReport,
@@ -25,7 +31,17 @@ struct JsonScanOutput<'a> {
     hash_errors: &'a [duplicate::HashError],
 }
 
-fn main() -> Result<()> {
+fn main() -> ExitCode {
+    match run() {
+        Ok(code) => ExitCode::from(code),
+        Err(error) => {
+            eprintln!("Error: {error:#}");
+            ExitCode::from(EXIT_GENERAL_ERROR)
+        }
+    }
+}
+
+fn run() -> Result<u8> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -50,22 +66,36 @@ fn main() -> Result<()> {
             } else {
                 reporter::report(&outcome.duplicates.groups);
             }
+
+            Ok(
+                if outcome.scan.is_complete() && outcome.duplicates.is_complete() {
+                    EXIT_SUCCESS
+                } else {
+                    EXIT_INCOMPLETE_SCAN
+                },
+            )
         }
         Commands::Move {
             path,
             to,
             dry_run,
+            keep,
             min_size,
             exclude,
         } => {
             let outcome = run_scan(path, min_size, exclude, false)?;
-            ensure_complete(&outcome, "move")?;
+            if !ensure_complete(&outcome, "move") {
+                return Ok(EXIT_INCOMPLETE_SCAN);
+            }
             if outcome.duplicates.groups.is_empty() {
                 println!("No duplicates found.");
             } else {
-                let report = cleanup::move_duplicates(outcome.duplicates.groups, &to, dry_run)?;
-                finish_cleanup_report(report, "move")?;
+                let report =
+                    cleanup::move_duplicates(outcome.duplicates.groups, &to, keep, dry_run)?;
+                return Ok(finish_cleanup_report(report, "move"));
             }
+
+            Ok(EXIT_SUCCESS)
         }
         Commands::Delete {
             path,
@@ -81,17 +111,19 @@ fn main() -> Result<()> {
                 );
             }
             let outcome = run_scan(path, min_size, exclude, false)?;
-            ensure_complete(&outcome, "delete")?;
+            if !ensure_complete(&outcome, "delete") {
+                return Ok(EXIT_INCOMPLETE_SCAN);
+            }
             if outcome.duplicates.groups.is_empty() {
                 println!("No duplicates found.");
             } else {
                 let report = cleanup::delete_duplicates(outcome.duplicates.groups, keep, dry_run)?;
-                finish_cleanup_report(report, "delete")?;
+                return Ok(finish_cleanup_report(report, "delete"));
             }
+
+            Ok(EXIT_SUCCESS)
         }
     }
-
-    Ok(())
 }
 
 fn run_scan(
@@ -141,24 +173,48 @@ fn run_scan(
     Ok(ScanOutcome { scan, duplicates })
 }
 
-fn ensure_complete(outcome: &ScanOutcome, operation: &str) -> Result<()> {
+fn ensure_complete(outcome: &ScanOutcome, operation: &str) -> bool {
     if outcome.scan.is_complete() && outcome.duplicates.is_complete() {
-        return Ok(());
+        return true;
     }
 
-    anyhow::bail!(
+    eprintln!(
         "Refusing to {operation}: scan is incomplete ({} scan failures, {} hash failures); no destructive operation was started.",
         outcome.scan.errors.len(),
         outcome.duplicates.hash_errors.len()
-    )
+    );
+    false
 }
 
-fn finish_cleanup_report(report: cleanup::CleanupReport, operation: &str) -> Result<()> {
+fn finish_cleanup_report(report: cleanup::CleanupReport, operation: &str) -> u8 {
     if report.has_skipped_files() {
-        anyhow::bail!(
+        eprintln!(
             "{operation} skipped {} file(s) after revalidation; changed files were not removed or moved.",
             report.skipped.len()
         );
+        return EXIT_PARTIAL_CLEANUP;
     }
-    Ok(())
+    EXIT_SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn partial_cleanup_uses_a_distinct_exit_code() {
+        let report = cleanup::CleanupReport {
+            completed: 1,
+            skipped: vec![cleanup::SkippedOperation {
+                path: PathBuf::from("changed.txt"),
+                reason: "file changed since scan".to_string(),
+            }],
+        };
+
+        assert_eq!(
+            finish_cleanup_report(report, "delete"),
+            EXIT_PARTIAL_CLEANUP
+        );
+    }
 }

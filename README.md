@@ -18,8 +18,10 @@ JSON.
 - A move --dry-run preview that does not create directories or move files.
 - Revalidation of file metadata and full BLAKE3 hashes before moving or
   deleting files.
+- Configurable keep policies for both move and delete operations.
 - Hard-link paths to the same physical file are not counted as reclaimable
   duplicate storage.
+- Symlinks are not followed or scanned; dedup only processes regular files.
 
 dedup uses ordinary filesystem removal. It does not provide secure erasure,
 which cannot be guaranteed by a normal remove_file operation.
@@ -81,6 +83,14 @@ Run the move after reviewing the source-to-destination list:
 dedup move ./Downloads --to ./duplicates_backup
 ~~~
 
+By default, move keeps the lexicographically smallest path. Use the same keep
+policies as delete when a different file should remain in place:
+
+~~~bash
+dedup move ./Downloads --to ./duplicates_backup --keep newest
+dedup move ./Downloads --to ./duplicates_backup --keep oldest
+~~~
+
 dedup first tries a filesystem rename. If the destination is on another
 filesystem, it copies the file, verifies the copied content, revalidates the
 source, and removes the source only after those checks succeed. Destination
@@ -108,6 +118,28 @@ against the original metadata and full BLAKE3 hash. If a file changed or a
 scan/hash error made the result incomplete, the affected operation is skipped
 or the destructive command refuses to start.
 
+### Filesystem behavior
+
+Only regular files are scanned. Symlinks are not followed, including symlinks
+to directories, and symlink paths are not hashed or moved/deleted. A target
+file is scanned only when it is reached through a regular path. Hard-link
+aliases are detected by physical file identity and are not counted as
+reclaimable duplicate storage.
+
+## Exit codes
+
+For valid commands, dedup uses these stable statuses:
+
+- `0`: the scan completed, or cleanup completed without skipped files.
+- `1`: the command failed before it could produce a complete result.
+- `2`: the scan or hashing result was incomplete. Scan reports are still
+  emitted; destructive commands refuse to start.
+- `3`: cleanup was partial because one or more files failed revalidation. Those
+  files are left unchanged.
+
+When `scan --json` returns `2`, standard output remains a JSON document and
+contains the scan and hash error details.
+
 ## Building from source
 
 The package uses Rust edition 2024 and has an MSRV of Rust 1.85.0. To build
@@ -126,9 +158,9 @@ For contributor checks and release validation, see
 
 ## Rust API
 
-v0.1.0 is intentionally a CLI-only package. It does not publish a Rust
-library target or promise a stable library API; the implementation modules are
-internal to the dedup executable.
+File Deduplicator is currently distributed as a CLI-only crate. It does not
+publish a Rust library target or promise a stable library API; the
+implementation modules are internal to the dedup executable.
 
 ## License
 
