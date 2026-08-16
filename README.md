@@ -24,7 +24,7 @@ JSON.
 - Revalidation of file metadata and full BLAKE3 hashes before moving or
   deleting files.
 - A `trash` command that uses the operating system recycle bin/trash.
-- Shell completion generation for Bash, Zsh, Fish, and PowerShell.
+- Shell completion generation for Bash, Zsh, Fish, PowerShell, and Elvish.
 - Tagged GitHub Releases with prebuilt Linux, Windows, and macOS binaries.
 - Configurable keep policies for move, trash, and delete operations.
 - Hard-link paths to the same physical file are not counted as reclaimable
@@ -191,6 +191,7 @@ dedup completions bash > ~/.local/share/bash-completion/completions/dedup
 dedup completions zsh > ~/.zfunc/_dedup
 dedup completions fish > ~/.config/fish/completions/dedup.fish
 dedup completions powershell > dedup.ps1
+dedup completions elvish > dedup.elv
 ~~~
 
 The generated PowerShell script can be dot-sourced from the PowerShell profile.
