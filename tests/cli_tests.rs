@@ -33,7 +33,7 @@ fn test_scan_basic() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_shell_completions_generate_for_supported_shells() -> Result<(), Box<dyn std::error::Error>>
 {
-    for shell in ["bash", "zsh", "fish", "powershell"] {
+    for shell in ["bash", "zsh", "fish", "powershell", "elvish"] {
         let mut cmd = Command::cargo_bin("dedup")?;
         cmd.arg("completions").arg(shell);
         cmd.assert()
