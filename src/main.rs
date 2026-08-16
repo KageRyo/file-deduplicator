@@ -6,10 +6,12 @@ mod reporter;
 mod scanner;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use cli::{Cli, Commands};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
+use std::io;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -50,11 +52,13 @@ fn run() -> Result<u8> {
             min_size,
             exclude,
             json,
+            threads,
         } => {
-            let outcome = run_scan(path, min_size, exclude, json)?;
+            let outcome = run_scan(path, min_size, exclude, threads, json)?;
             if json {
                 let output = JsonScanOutput {
                     summary: outcome.scan.summary(
+                        outcome.duplicates.partial_hash_candidates,
                         outcome.duplicates.candidates_hashed,
                         outcome.duplicates.hash_errors.len(),
                     ),
@@ -82,8 +86,9 @@ fn run() -> Result<u8> {
             keep,
             min_size,
             exclude,
+            threads,
         } => {
-            let outcome = run_scan(path, min_size, exclude, false)?;
+            let outcome = run_scan(path, min_size, exclude, threads, false)?;
             if !ensure_complete(&outcome, "move") {
                 return Ok(EXIT_INCOMPLETE_SCAN);
             }
@@ -104,13 +109,14 @@ fn run() -> Result<u8> {
             keep,
             min_size,
             exclude,
+            threads,
         } => {
             if !dry_run && !confirm {
                 anyhow::bail!(
                     "You must use --confirm to delete files, or use --dry-run to see what would happen."
                 );
             }
-            let outcome = run_scan(path, min_size, exclude, false)?;
+            let outcome = run_scan(path, min_size, exclude, threads, false)?;
             if !ensure_complete(&outcome, "delete") {
                 return Ok(EXIT_INCOMPLETE_SCAN);
             }
@@ -123,6 +129,38 @@ fn run() -> Result<u8> {
 
             Ok(EXIT_SUCCESS)
         }
+        Commands::Trash {
+            path,
+            dry_run,
+            confirm,
+            keep,
+            min_size,
+            exclude,
+            threads,
+        } => {
+            if !dry_run && !confirm {
+                anyhow::bail!(
+                    "You must use --confirm to move files to the trash, or use --dry-run to see what would happen."
+                );
+            }
+            let outcome = run_scan(path, min_size, exclude, threads, false)?;
+            if !ensure_complete(&outcome, "trash") {
+                return Ok(EXIT_INCOMPLETE_SCAN);
+            }
+            if outcome.duplicates.groups.is_empty() {
+                println!("No duplicates found.");
+            } else {
+                let report = cleanup::trash_duplicates(outcome.duplicates.groups, keep, dry_run)?;
+                return Ok(finish_cleanup_report(report, "trash"));
+            }
+
+            Ok(EXIT_SUCCESS)
+        }
+        Commands::Completions { shell } => {
+            let mut command = Cli::command();
+            generate(shell, &mut command, "dedup", &mut io::stdout());
+            Ok(EXIT_SUCCESS)
+        }
     }
 }
 
@@ -130,6 +168,7 @@ fn run_scan(
     path: PathBuf,
     min_size: Option<String>,
     exclude: Vec<String>,
+    threads: Option<usize>,
     quiet: bool,
 ) -> Result<ScanOutcome> {
     let min_size_bytes = match min_size {
@@ -160,7 +199,7 @@ fn run_scan(
         Some(progress)
     };
 
-    let duplicates = duplicate::find_duplicates(scan.files.clone(), progress.as_ref());
+    let duplicates = duplicate::find_duplicates(scan.files.clone(), progress.as_ref(), threads)?;
 
     if let Some(progress) = progress {
         progress.finish_and_clear();

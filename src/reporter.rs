@@ -24,10 +24,19 @@ pub fn report(groups: &[DuplicateGroup]) {
 }
 
 pub fn report_scan_summary(scan: &ScanReport, duplicates: &DuplicateResult) {
-    let summary = scan.summary(duplicates.candidates_hashed, duplicates.hash_errors.len());
+    let summary = scan.summary(
+        duplicates.partial_hash_candidates,
+        duplicates.candidates_hashed,
+        duplicates.hash_errors.len(),
+    );
     eprintln!(
-        "Scan summary: {} files scanned, {} skipped, {} scan failures, {} hash failures.",
-        summary.files_scanned, summary.files_skipped, summary.scan_failures, summary.hash_failures
+        "Scan summary: {} files scanned, {} skipped, {} scan failures, {} partial-hash candidates, {} full-hash candidates, {} hash failures.",
+        summary.files_scanned,
+        summary.files_skipped,
+        summary.scan_failures,
+        summary.partial_hash_candidates,
+        summary.hash_candidates,
+        summary.hash_failures
     );
 
     for error in &scan.errors {

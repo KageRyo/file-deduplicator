@@ -126,11 +126,17 @@ impl ScanReport {
         self.excluded_files + self.below_min_size_files + self.errors.len()
     }
 
-    pub fn summary(&self, hash_candidates: usize, hash_failures: usize) -> ScanSummary {
+    pub fn summary(
+        &self,
+        partial_hash_candidates: usize,
+        hash_candidates: usize,
+        hash_failures: usize,
+    ) -> ScanSummary {
         ScanSummary {
             files_scanned: self.files.len(),
             files_skipped: self.skipped_files(),
             scan_failures: self.errors.len(),
+            partial_hash_candidates,
             hash_candidates,
             hash_failures,
         }
@@ -142,6 +148,7 @@ pub struct ScanSummary {
     pub files_scanned: usize,
     pub files_skipped: usize,
     pub scan_failures: usize,
+    pub partial_hash_candidates: usize,
     pub hash_candidates: usize,
     pub hash_failures: usize,
 }

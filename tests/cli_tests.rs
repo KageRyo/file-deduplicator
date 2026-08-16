@@ -31,6 +31,46 @@ fn test_scan_basic() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_shell_completions_generate_for_supported_shells() -> Result<(), Box<dyn std::error::Error>>
+{
+    for shell in ["bash", "zsh", "fish", "powershell"] {
+        let mut cmd = Command::cargo_bin("dedup")?;
+        cmd.arg("completions").arg(shell);
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("dedup"));
+    }
+    Ok(())
+}
+
+#[test]
+fn test_threads_option_requires_a_positive_value() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    fs::write(dir.path().join("f1.txt"), "dup")?;
+    fs::write(dir.path().join("f2.txt"), "dup")?;
+
+    let mut valid = Command::cargo_bin("dedup")?;
+    valid
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--threads")
+        .arg("1")
+        .assert()
+        .success();
+
+    let mut invalid = Command::cargo_bin("dedup")?;
+    invalid
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--threads")
+        .arg("0")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("must be at least 1"));
+    Ok(())
+}
+
+#[test]
 fn test_delete_dry_run() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
     let f1 = dir.path().join("f1.txt");
@@ -81,6 +121,27 @@ fn test_move_dry_run_does_not_modify_filesystem() -> Result<(), Box<dyn std::err
     assert!(f1.exists());
     assert!(f2.exists());
     assert!(!destination.exists());
+    Ok(())
+}
+
+#[test]
+fn test_trash_dry_run_does_not_modify_filesystem() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let f1 = dir.path().join("f1.txt");
+    let f2 = dir.path().join("f2.txt");
+    fs::write(&f1, "dup")?;
+    fs::write(&f2, "dup")?;
+
+    let mut cmd = Command::cargo_bin("dedup")?;
+    cmd.arg("trash")
+        .arg(dir.path())
+        .arg("--dry-run")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[DRY RUN] Would trash:"));
+
+    assert!(f1.exists());
+    assert!(f2.exists());
     Ok(())
 }
 

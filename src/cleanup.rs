@@ -162,6 +162,59 @@ pub fn delete_duplicates(
     Ok(report)
 }
 
+pub fn trash_duplicates(
+    groups: Vec<DuplicateGroup>,
+    policy: KeepPolicy,
+    dry_run: bool,
+) -> Result<CleanupReport> {
+    let mut report = CleanupReport::default();
+
+    for group in groups {
+        let entries = ordered_entries(&group, policy);
+        let (to_keep, to_trash) = entries
+            .split_first()
+            .ok_or_else(|| anyhow!("duplicate group has no files"))?;
+
+        let validation = validate_group(&entries, &group.hash);
+        if !validation.is_empty() {
+            report_skips(&validation);
+            report.skipped.extend(validation);
+            report_skip_for_remaining_entries(&mut report, &entries, &group.hash);
+            continue;
+        }
+
+        println!("Keeping: {}", to_keep.path.display());
+
+        for file in to_trash {
+            match revalidate_file(file, &group.hash) {
+                Ok(()) if dry_run => {
+                    println!("[DRY RUN] Would trash: {}", file.path.display());
+                }
+                Ok(()) => {
+                    println!("Trashing: {}", file.path.display());
+                    trash::delete(&file.path).with_context(|| {
+                        format!(
+                            "failed to move {} to the system trash; trash support may be unavailable on this platform",
+                            file.path.display()
+                        )
+                    })?;
+                    report.completed += 1;
+                }
+                Err(reason) => {
+                    let skipped = SkippedOperation {
+                        path: file.path.clone(),
+                        reason,
+                    };
+                    report_skips(std::slice::from_ref(&skipped));
+                    report.skipped.push(skipped);
+                }
+            }
+        }
+    }
+
+    Ok(report)
+}
+
 fn ordered_entries(group: &DuplicateGroup, policy: KeepPolicy) -> Vec<FileInfo> {
     let mut entries = group.entries.clone();
     match policy {
