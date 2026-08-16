@@ -56,6 +56,11 @@ request:
 4. Push the branch and open a pull request targeting main.
 5. Wait for the Linux, Windows, and macOS checks before requesting review.
 
+When changing the CLI, update the relevant help text and README examples.
+Benchmark changes should keep scenarios deterministic and describe what each
+scenario measures. Release workflow changes should be validated against the
+target names and archive names documented in `docs/RELEASING.md`.
+
 Do not merge your own pull request unless the project maintainers ask you to
 do so.
 

@@ -12,6 +12,10 @@ JSON.
 ## Features
 
 - Full-content duplicate detection after a size pre-filter.
+- File head/tail partial hashing avoids full-file reads for candidates that
+  clearly differ, while full BLAKE3 remains required for duplicates.
+- Configurable hashing worker count with `--threads` on scan and cleanup
+  commands.
 - Deterministic first keep policy: the lexicographically smallest path in a
   duplicate group is kept.
 - Glob-based exclusions such as target/**, **/.git/**, and *.tmp.
@@ -19,7 +23,10 @@ JSON.
 - A move --dry-run preview that does not create directories or move files.
 - Revalidation of file metadata and full BLAKE3 hashes before moving or
   deleting files.
-- Configurable keep policies for both move and delete operations.
+- A `trash` command that uses the operating system recycle bin/trash.
+- Shell completion generation for Bash, Zsh, Fish, PowerShell, and Elvish.
+- Tagged GitHub Releases with prebuilt Linux, Windows, and macOS binaries.
+- Configurable keep policies for move, trash, and delete operations.
 - Hard-link paths to the same physical file are not counted as reclaimable
   duplicate storage.
 - Symlinks are not followed or scanned; dedup only processes regular files.
@@ -41,6 +48,11 @@ The installed command is dedup:
 dedup --version
 ~~~
 
+Prebuilt archives for Linux x86_64, Windows x86_64, macOS Intel, and macOS
+Apple Silicon are published on the
+[GitHub Releases page](https://github.com/KageRyo/file-deduplicator/releases).
+Each archive includes a SHA-256 checksum file.
+
 ## Usage
 
 ### Scan
@@ -58,6 +70,9 @@ dedup scan ./project \
 
 # Write machine-readable output
 dedup scan ./images --json > report.json
+
+# Limit hashing to four worker threads
+dedup scan ./Downloads --threads 4
 ~~~
 
 With --json, standard output contains only the JSON document. Progress and
@@ -69,6 +84,12 @@ Exclusion patterns use / separators on every platform and are matched
 relative to the scan root. Patterns containing / match the relative path;
 patterns without / also match individual path components, so *.tmp, .git, and
 target work at any depth. Exclusions are globs, not substring matches.
+
+Files with the same size are first compared using a BLAKE3 hash of their first
+and last 64 KiB. Only files with matching partial hashes are read completely,
+and full BLAKE3 hashes are always used before reporting duplicates. Omit
+`--threads` to use Rayon’s default worker count; when supplied it must be at
+least 1.
 
 ### Move
 
@@ -96,6 +117,25 @@ dedup first tries a filesystem rename. If the destination is on another
 filesystem, it copies the file, verifies the copied content, revalidates the
 source, and removes the source only after those checks succeed. Destination
 collisions preserve the extension (photo.jpg becomes photo_1.jpg).
+
+### Trash
+
+Preview moving duplicates to the operating system trash or recycle bin:
+
+~~~bash
+dedup trash ./Downloads --dry-run
+~~~
+
+Move them after reviewing the preview:
+
+~~~bash
+dedup trash ./Downloads --confirm --keep first
+~~~
+
+The command uses the platform trash mechanism instead of permanently removing
+files. If the platform does not provide a usable trash implementation, the
+command fails before reporting success. Revalidation and keep policies work the
+same way as for `move` and `delete`.
 
 ### Delete
 
@@ -141,6 +181,22 @@ For valid commands, dedup uses these stable statuses:
 When `scan --json` returns `2`, standard output remains a JSON document and
 contains the scan and hash error details.
 
+## Shell completions
+
+Generate a completion script to standard output and redirect it to the shell’s
+completion directory. The command does not modify user files itself:
+
+~~~bash
+dedup completions bash > ~/.local/share/bash-completion/completions/dedup
+dedup completions zsh > ~/.zfunc/_dedup
+dedup completions fish > ~/.config/fish/completions/dedup.fish
+dedup completions powershell > dedup.ps1
+dedup completions elvish > dedup.elv
+~~~
+
+The generated PowerShell script can be dot-sourced from the PowerShell profile.
+Use `dedup completions --help` to see the supported shell names.
+
 ## Building from source
 
 The package uses Rust edition 2024 and has an MSRV of Rust 1.85.0. To build
@@ -156,6 +212,19 @@ cargo build --release
 For contributor checks and release validation, see
 [CONTRIBUTING.md](CONTRIBUTING.md) and
 [docs/RELEASING.md](docs/RELEASING.md).
+
+## Benchmarks
+
+Run the Criterion suite with:
+
+~~~bash
+cargo bench --bench scan_bench
+~~~
+
+The suite covers many small files, large files, mostly unique files, many
+same-sized files, and high duplicate ratios. It reports reproducible relative
+measurements for the duplicate-detection pipeline; results depend on the
+machine and filesystem.
 
 ## Rust API
 
