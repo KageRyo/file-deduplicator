@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   publish:
+    needs: build-assets
     # v0.1.0 is the first manual publish. Do not let an accidental tag try
     # to use Trusted Publishing before that one-time setup is complete.
     if: github.ref_name != 'v0.1.0'
