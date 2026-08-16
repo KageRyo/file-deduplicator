@@ -67,6 +67,17 @@ For a later version:
 5. Review the publish workflow result, the resulting crates.io package, and
    the GitHub Release created by the follow-up release job.
 
+The publish workflow also builds and attaches versioned archives for:
+
+- Linux x86_64 (`x86_64-unknown-linux-gnu`)
+- Windows x86_64 (`x86_64-pc-windows-msvc`)
+- macOS Intel (`x86_64-apple-darwin`)
+- macOS Apple Silicon (`aarch64-apple-darwin`)
+
+Each archive contains the `dedup` executable and has a matching SHA-256
+checksum asset. The release is created only after both crates.io publishing
+and all binary builds succeed.
+
 The workflow has an explicit v0.1.0 guard so that an accidental v0.1.0 tag
 cannot trigger a publish attempt before Trusted Publishing was configured.
 For later tags, the GitHub Release job runs only after the crates.io publish
