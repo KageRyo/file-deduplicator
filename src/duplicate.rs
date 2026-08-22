@@ -1,3 +1,4 @@
+use crate::cache::{CacheStats, HashCache};
 use crate::hasher;
 use crate::scanner::{FileInfo, PhysicalFileId, normalized_path_key};
 use anyhow::{Context, Result};
@@ -28,6 +29,7 @@ pub struct DuplicateResult {
     pub hash_errors: Vec<HashError>,
     pub partial_hash_candidates: usize,
     pub candidates_hashed: usize,
+    pub cache: CacheStats,
 }
 
 impl DuplicateResult {
@@ -38,10 +40,20 @@ impl DuplicateResult {
 
 type HashAttempt = std::result::Result<(FileInfo, String), HashError>;
 
+#[allow(dead_code)]
 pub fn find_duplicates(
     files: Vec<FileInfo>,
     pb: Option<&ProgressBar>,
     threads: Option<usize>,
+) -> Result<DuplicateResult> {
+    find_duplicates_with_cache(files, pb, threads, None)
+}
+
+pub fn find_duplicates_with_cache(
+    files: Vec<FileInfo>,
+    pb: Option<&ProgressBar>,
+    threads: Option<usize>,
+    mut cache: Option<&mut HashCache>,
 ) -> Result<DuplicateResult> {
     if threads == Some(0) {
         return Err(anyhow::anyhow!("hashing thread count must be at least 1"));
@@ -84,13 +96,32 @@ pub fn find_duplicates(
 
     let mut hash_errors = Vec::new();
 
-    let partial_results = hash_files(
-        candidates,
+    let mut partial_cache_hits = Vec::new();
+    let mut partial_cache_misses = Vec::new();
+    for file in candidates {
+        match cache
+            .as_deref_mut()
+            .and_then(|cache| cache.lookup_partial(&file))
+        {
+            Some(hash) => partial_cache_hits.push((file, hash)),
+            None => partial_cache_misses.push(file),
+        }
+    }
+
+    let mut partial_results = hash_files(
+        partial_cache_misses,
         pb,
         threads,
         "partial",
         hasher::partial_hash_file,
     )?;
+    if let Some(cache) = cache.as_deref_mut() {
+        for (file, hash) in partial_results.iter().flatten() {
+            cache.record_partial(file, hash.clone());
+        }
+    }
+    partial_results.extend(partial_cache_hits.into_iter().map(Ok));
+
     let mut partial_groups: HashMap<(u64, String), Vec<FileInfo>> = HashMap::new();
     for result in partial_results {
         match result {
@@ -118,8 +149,27 @@ pub fn find_duplicates(
         pb.set_length((partial_hash_candidates + full_candidates.len()) as u64);
     }
 
-    let full_results = hash_files(full_candidates, pb, threads, "full", hasher::hash_file)?;
-    let candidates_hashed = full_results.len();
+    let candidates_hashed = full_candidates.len();
+    let mut full_cache_hits = Vec::new();
+    let mut full_cache_misses = Vec::new();
+    for file in full_candidates {
+        match cache
+            .as_deref_mut()
+            .and_then(|cache| cache.lookup_full(&file))
+        {
+            Some(hash) => full_cache_hits.push((file, hash)),
+            None => full_cache_misses.push(file),
+        }
+    }
+
+    let mut full_results = hash_files(full_cache_misses, pb, threads, "full", hasher::hash_file)?;
+    if let Some(cache) = cache.as_deref_mut() {
+        for (file, hash) in full_results.iter().flatten() {
+            cache.record_full(file, hash.clone());
+        }
+    }
+    full_results.extend(full_cache_hits.into_iter().map(Ok));
+
     let mut hashed_candidates = Vec::new();
     for result in full_results {
         match result {
@@ -181,11 +231,17 @@ pub fn find_duplicates(
             .then_with(|| left.hash.cmp(&right.hash))
     });
 
+    let cache = cache
+        .as_ref()
+        .map(|cache| cache.stats())
+        .unwrap_or_default();
+
     Ok(DuplicateResult {
         groups,
         hash_errors,
         partial_hash_candidates,
         candidates_hashed,
+        cache,
     })
 }
 

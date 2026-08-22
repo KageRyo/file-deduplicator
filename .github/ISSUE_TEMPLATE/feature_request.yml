@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an improvement to dedup.
+title: "[Feature]: "
+labels:
+  - kind/feature
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: problem to solve
+      description: What workflow or limitation would this improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: proposed behavior
+      description: Describe the behavior or interface you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: alternatives considered
+      description: Describe any workaround or alternative approach.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: additional context
+      description: Add examples, references, or other useful context.

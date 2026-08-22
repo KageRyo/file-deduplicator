@@ -47,8 +47,7 @@ reason and remediation plan in the relevant issue or pull request.
 Changes are developed on a branch based on main and merged through a pull
 request:
 
-1. Create a focused branch such as feature/name, fix/name, docs/name, or
-   chore/name.
+1. Create a focused branch such as feature/name or fix/name.
 2. Add or update tests for behavior changes.
 3. Keep commits focused and use
    [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/),

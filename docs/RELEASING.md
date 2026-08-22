@@ -63,7 +63,7 @@ For a later version:
 1. Update the Cargo package version and lockfile as needed.
 2. Run the complete validation checklist and merge the release pull request.
 3. Confirm Trusted Publishing is configured for the repository and workflow.
-4. Create and push a version tag such as v0.2.0 from the merged commit.
+4. Create and push a version tag such as v0.2.1 from the merged commit.
 5. Review the publish workflow result, the resulting crates.io package, and
    the GitHub Release created by the follow-up release job.
 

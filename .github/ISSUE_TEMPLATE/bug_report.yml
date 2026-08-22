@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a reproducible problem with dedup.
+title: "[Bug]: "
+labels:
+  - kind/bug
+body:
+  - type: input
+    id: version
+    attributes:
+      label: dedup version
+      description: Run `dedup --version` and paste the result.
+      placeholder: dedup 0.2.1
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: operating system
+      options:
+        - Linux
+        - Windows
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: installation
+    attributes:
+      label: installation method
+      description: For example, Cargo, a release archive, or a local build.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: command used
+      description: Include the complete command and relevant options.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: reproduction steps
+      description: Include a small example or fixture when possible.
+    validations:
+      required: true

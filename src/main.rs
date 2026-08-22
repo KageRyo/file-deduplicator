@@ -1,3 +1,4 @@
+mod cache;
 mod cleanup;
 mod cli;
 mod duplicate;
@@ -19,15 +20,30 @@ const EXIT_SUCCESS: u8 = 0;
 const EXIT_GENERAL_ERROR: u8 = 1;
 const EXIT_INCOMPLETE_SCAN: u8 = 2;
 const EXIT_PARTIAL_CLEANUP: u8 = 3;
+const JSON_SCHEMA_VERSION: u32 = 1;
 
 struct ScanOutcome {
     scan: scanner::ScanReport,
     duplicates: duplicate::DuplicateResult,
 }
 
+struct ScanRequest {
+    path: PathBuf,
+    min_size: Option<String>,
+    exclude: Vec<String>,
+    threads: Option<usize>,
+    max_depth: Option<usize>,
+    one_file_system: bool,
+    no_cache: bool,
+    quiet: bool,
+}
+
 #[derive(Serialize)]
 struct JsonScanOutput<'a> {
+    schema_version: u32,
+    application_version: &'static str,
     summary: scanner::ScanSummary,
+    cache: cache::CacheStats,
     duplicate_groups: &'a [duplicate::DuplicateGroup],
     scan_errors: &'a [scanner::ScanError],
     hash_errors: &'a [duplicate::HashError],
@@ -53,15 +69,30 @@ fn run() -> Result<u8> {
             exclude,
             json,
             threads,
+            max_depth,
+            one_file_system,
+            no_cache,
         } => {
-            let outcome = run_scan(path, min_size, exclude, threads, json)?;
+            let outcome = run_scan(ScanRequest {
+                path,
+                min_size,
+                exclude,
+                threads,
+                max_depth,
+                one_file_system,
+                no_cache,
+                quiet: json,
+            })?;
             if json {
                 let output = JsonScanOutput {
+                    schema_version: JSON_SCHEMA_VERSION,
+                    application_version: env!("CARGO_PKG_VERSION"),
                     summary: outcome.scan.summary(
                         outcome.duplicates.partial_hash_candidates,
                         outcome.duplicates.candidates_hashed,
                         outcome.duplicates.hash_errors.len(),
                     ),
+                    cache: outcome.duplicates.cache.clone(),
                     duplicate_groups: &outcome.duplicates.groups,
                     scan_errors: &outcome.scan.errors,
                     hash_errors: &outcome.duplicates.hash_errors,
@@ -87,8 +118,20 @@ fn run() -> Result<u8> {
             min_size,
             exclude,
             threads,
+            max_depth,
+            one_file_system,
+            no_cache,
         } => {
-            let outcome = run_scan(path, min_size, exclude, threads, false)?;
+            let outcome = run_scan(ScanRequest {
+                path,
+                min_size,
+                exclude,
+                threads,
+                max_depth,
+                one_file_system,
+                no_cache,
+                quiet: false,
+            })?;
             if !ensure_complete(&outcome, "move") {
                 return Ok(EXIT_INCOMPLETE_SCAN);
             }
@@ -110,13 +153,25 @@ fn run() -> Result<u8> {
             min_size,
             exclude,
             threads,
+            max_depth,
+            one_file_system,
+            no_cache,
         } => {
             if !dry_run && !confirm {
                 anyhow::bail!(
                     "You must use --confirm to delete files, or use --dry-run to see what would happen."
                 );
             }
-            let outcome = run_scan(path, min_size, exclude, threads, false)?;
+            let outcome = run_scan(ScanRequest {
+                path,
+                min_size,
+                exclude,
+                threads,
+                max_depth,
+                one_file_system,
+                no_cache,
+                quiet: false,
+            })?;
             if !ensure_complete(&outcome, "delete") {
                 return Ok(EXIT_INCOMPLETE_SCAN);
             }
@@ -137,13 +192,25 @@ fn run() -> Result<u8> {
             min_size,
             exclude,
             threads,
+            max_depth,
+            one_file_system,
+            no_cache,
         } => {
             if !dry_run && !confirm {
                 anyhow::bail!(
                     "You must use --confirm to move files to the trash, or use --dry-run to see what would happen."
                 );
             }
-            let outcome = run_scan(path, min_size, exclude, threads, false)?;
+            let outcome = run_scan(ScanRequest {
+                path,
+                min_size,
+                exclude,
+                threads,
+                max_depth,
+                one_file_system,
+                no_cache,
+                quiet: false,
+            })?;
             if !ensure_complete(&outcome, "trash") {
                 return Ok(EXIT_INCOMPLETE_SCAN);
             }
@@ -164,13 +231,17 @@ fn run() -> Result<u8> {
     }
 }
 
-fn run_scan(
-    path: PathBuf,
-    min_size: Option<String>,
-    exclude: Vec<String>,
-    threads: Option<usize>,
-    quiet: bool,
-) -> Result<ScanOutcome> {
+fn run_scan(request: ScanRequest) -> Result<ScanOutcome> {
+    let ScanRequest {
+        path,
+        min_size,
+        exclude,
+        threads,
+        max_depth,
+        one_file_system,
+        no_cache,
+        quiet,
+    } = request;
     let min_size_bytes = match min_size {
         Some(value) => Some(
             scanner::parse_size(&value)
@@ -183,7 +254,32 @@ fn run_scan(
         eprintln!("Scanning: {:?}", path);
     }
 
-    let scan = scanner::scan_dir(path, min_size_bytes, &exclude)?;
+    let mut hash_cache = if no_cache {
+        None
+    } else {
+        cache::default_cache_path().map(|cache_path| {
+            match cache::HashCache::load(cache_path.clone()) {
+                Ok(cache) => cache,
+                Err(error) => {
+                    eprintln!(
+                        "Warning: unable to read hash cache at {}: {error}; rebuilding it.",
+                        cache_path.display()
+                    );
+                    cache::HashCache::new(cache_path)
+                }
+            }
+        })
+    };
+
+    let scan = scanner::scan_dir_with_options(
+        path,
+        scanner::ScanOptions {
+            min_size: min_size_bytes,
+            exclude,
+            max_depth,
+            one_file_system,
+        },
+    )?;
 
     let progress = if quiet {
         None
@@ -199,7 +295,19 @@ fn run_scan(
         Some(progress)
     };
 
-    let duplicates = duplicate::find_duplicates(scan.files.clone(), progress.as_ref(), threads)?;
+    let duplicates = duplicate::find_duplicates_with_cache(
+        scan.files.clone(),
+        progress.as_ref(),
+        threads,
+        hash_cache.as_mut().map(|cache| &mut *cache),
+    )?;
+
+    if let Some(hash_cache) = hash_cache.as_mut() {
+        hash_cache.prune_missing();
+        if let Err(error) = hash_cache.save() {
+            eprintln!("Warning: unable to save hash cache: {error}");
+        }
+    }
 
     if let Some(progress) = progress {
         progress.finish_and_clear();

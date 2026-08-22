@@ -6,6 +6,8 @@ use criterion::{
 use std::fs;
 use tempfile::TempDir;
 
+#[path = "../src/cache.rs"]
+mod cache;
 #[path = "../src/duplicate.rs"]
 mod duplicate;
 #[path = "../src/hasher.rs"]
@@ -126,5 +128,45 @@ fn bench_duplicate_detection(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_duplicate_detection);
+fn bench_cache_behavior(c: &mut Criterion) {
+    let data = setup_bench_data(128, 64 * 1024, DataShape::HighDuplicateRatio);
+    let mut group = c.benchmark_group("duplicate_detection_cache");
+    group.throughput(Throughput::Elements(data.files.len() as u64));
+
+    group.bench_function("cold_scan", |benchmark| {
+        benchmark.iter(|| {
+            let mut cache = cache::HashCache::new(data._dir.path().join("cold-cache.json"));
+            black_box(
+                duplicate::find_duplicates_with_cache(
+                    black_box(data.files.clone()),
+                    None,
+                    None,
+                    Some(&mut cache),
+                )
+                .unwrap(),
+            )
+        });
+    });
+
+    let mut warm_cache = cache::HashCache::new(data._dir.path().join("warm-cache.json"));
+    duplicate::find_duplicates_with_cache(data.files.clone(), None, None, Some(&mut warm_cache))
+        .unwrap();
+    group.bench_function("warm_scan", |benchmark| {
+        benchmark.iter(|| {
+            black_box(
+                duplicate::find_duplicates_with_cache(
+                    black_box(data.files.clone()),
+                    None,
+                    None,
+                    Some(&mut warm_cache),
+                )
+                .unwrap(),
+            )
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_duplicate_detection, bench_cache_behavior);
 criterion_main!(benches);

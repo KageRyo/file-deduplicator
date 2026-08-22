@@ -33,6 +33,18 @@ pub enum Commands {
         /// Number of hashing worker threads (must be at least 1)
         #[arg(long, value_parser = parse_positive_usize)]
         threads: Option<usize>,
+
+        /// Maximum traversal depth (the scan root is depth 0)
+        #[arg(long)]
+        max_depth: Option<usize>,
+
+        /// Do not descend into a different filesystem
+        #[arg(long)]
+        one_file_system: bool,
+
+        /// Do not read or write the persistent hash cache
+        #[arg(long)]
+        no_cache: bool,
     },
 
     /// Move duplicate files to a specific directory
@@ -63,6 +75,18 @@ pub enum Commands {
         /// Number of hashing worker threads (must be at least 1)
         #[arg(long, value_parser = parse_positive_usize)]
         threads: Option<usize>,
+
+        /// Maximum traversal depth (the scan root is depth 0)
+        #[arg(long)]
+        max_depth: Option<usize>,
+
+        /// Do not descend into a different filesystem
+        #[arg(long)]
+        one_file_system: bool,
+
+        /// Do not read or write the persistent hash cache
+        #[arg(long)]
+        no_cache: bool,
     },
 
     /// Delete duplicate files
@@ -93,6 +117,18 @@ pub enum Commands {
         /// Number of hashing worker threads (must be at least 1)
         #[arg(long, value_parser = parse_positive_usize)]
         threads: Option<usize>,
+
+        /// Maximum traversal depth (the scan root is depth 0)
+        #[arg(long)]
+        max_depth: Option<usize>,
+
+        /// Do not descend into a different filesystem
+        #[arg(long)]
+        one_file_system: bool,
+
+        /// Do not read or write the persistent hash cache
+        #[arg(long)]
+        no_cache: bool,
     },
 
     /// Move duplicate files to the operating system trash or recycle bin
@@ -123,6 +159,18 @@ pub enum Commands {
         /// Number of hashing worker threads (must be at least 1)
         #[arg(long, value_parser = parse_positive_usize)]
         threads: Option<usize>,
+
+        /// Maximum traversal depth (the scan root is depth 0)
+        #[arg(long)]
+        max_depth: Option<usize>,
+
+        /// Do not descend into a different filesystem
+        #[arg(long)]
+        one_file_system: bool,
+
+        /// Do not read or write the persistent hash cache
+        #[arg(long)]
+        no_cache: bool,
     },
 
     /// Generate shell completion scripts
