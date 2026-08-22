@@ -19,7 +19,10 @@ JSON.
 - Deterministic first keep policy: the lexicographically smallest path in a
   duplicate group is kept.
 - Glob-based exclusions such as target/**, **/.git/**, and *.tmp.
-- JSON scan output with scan and hashing error details.
+- Persistent partial and full hash cache for repeated scans, with cache
+  statistics and an explicit `--no-cache` bypass.
+- Configurable traversal depth and same-filesystem scanning.
+- Versioned JSON scan output with scan and hashing error details.
 - A move --dry-run preview that does not create directories or move files.
 - Revalidation of file metadata and full BLAKE3 hashes before moving or
   deleting files.
@@ -73,12 +76,27 @@ dedup scan ./images --json > report.json
 
 # Limit hashing to four worker threads
 dedup scan ./Downloads --threads 4
+
+# Scan only the root and its direct children, without crossing filesystems
+dedup scan ./Downloads --max-depth 1 --one-file-system
+
+# Bypass the persistent hash cache for one scan
+dedup scan ./Downloads --no-cache
 ~~~
 
 With --json, standard output contains only the JSON document. Progress and
 human-readable diagnostics are not mixed into that output. The JSON summary
 includes successfully scanned files, skipped files, scan failures, hash
-candidates, and hash failures.
+candidates, and hash failures. The top-level `schema_version` is `1`, and
+`application_version` identifies the installed dedup version. The `cache`
+object reports partial/full hits and misses plus invalidated and pruned
+entries.
+
+Schema version 1 permits additive fields that do not change the meaning or
+type of existing fields. Consumers should ignore unknown fields. Renaming,
+removing, or changing the type or meaning of an existing field requires a new
+schema version. Scan and hash error arrays remain available in every version
+that supports the current scan output contract.
 
 Exclusion patterns use / separators on every platform and are matched
 relative to the scan root. Patterns containing / match the relative path;
@@ -90,6 +108,26 @@ and last 64 KiB. Only files with matching partial hashes are read completely,
 and full BLAKE3 hashes are always used before reporting duplicates. Omit
 `--threads` to use Rayon’s default worker count; when supplied it must be at
 least 1.
+
+The hash cache is enabled by default. On Unix, it is stored at
+`$XDG_CACHE_HOME/file-deduplicator/hashes-v1.json`, or
+`$HOME/.cache/file-deduplicator/hashes-v1.json` when `XDG_CACHE_HOME` is not
+set. On Windows, it is stored below `%LOCALAPPDATA%/file-deduplicator`.
+`DEDUP_CACHE_DIR` overrides the parent cache directory on any platform. Cache
+entries include the stable file path, physical file identity, size, and
+modification time. A changed or replaced file invalidates its entry. Deleted
+paths are pruned, and a moved file is treated as a cache miss at its new path;
+duplicate correctness still requires a full BLAKE3 hash. A malformed cache is
+discarded and rebuilt without preventing the scan from completing.
+
+The scan root is depth 0. `--max-depth 0` therefore scans only a file supplied
+as the root, while `--max-depth 1` includes files directly inside a directory
+but does not descend into nested directories. Omitting the option keeps the
+existing unlimited traversal behavior. `--one-file-system` prevents descent
+into another filesystem on Unix and Windows. On platforms where WalkDir cannot
+provide a reliable filesystem identity, requesting this option reports a scan
+error instead of silently crossing a boundary. These controls compose with
+exclusions, minimum-size filtering, JSON output, and cleanup commands.
 
 ### Move
 
@@ -223,8 +261,8 @@ cargo bench --bench scan_bench
 
 The suite covers many small files, large files, mostly unique files, many
 same-sized files, and high duplicate ratios. It reports reproducible relative
-measurements for the duplicate-detection pipeline; results depend on the
-machine and filesystem.
+measurements for the duplicate-detection pipeline, including cold and warm
+hash-cache scans; results depend on the machine and filesystem.
 
 ## Rust API
 
