@@ -5,8 +5,12 @@ use std::fs::{self, Metadata};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+#[cfg(unix)]
+use std::time::{Duration, UNIX_EPOCH};
 use walkdir::{Error as WalkDirError, WalkDir};
 
+#[cfg(windows)]
+use std::hash::{Hash, Hasher};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -36,6 +40,7 @@ pub struct FileInfo {
     pub path: PathBuf,
     pub size: u64,
     pub modified: SystemTime,
+    pub changed: Option<SystemTime>,
     pub identity: PhysicalFileId,
 }
 
@@ -45,6 +50,7 @@ impl FileInfo {
             path: path.to_path_buf(),
             size: metadata.len(),
             modified: metadata.modified()?,
+            changed: metadata_change_time(metadata),
             identity: physical_file_id(path, metadata)?,
         })
     }
@@ -58,6 +64,70 @@ impl FileInfo {
             ));
         }
         Self::from_metadata(path, &metadata)
+    }
+}
+
+impl PhysicalFileId {
+    pub fn cache_key(&self) -> String {
+        match self {
+            #[cfg(unix)]
+            Self::Unix { device, inode } => format!("unix:{device}:{inode}"),
+            #[cfg(windows)]
+            Self::Windows(handle) => {
+                let mut hasher = StableHasher::default();
+                handle.hash(&mut hasher);
+                format!("windows:{:016x}", hasher.finish())
+            }
+            Self::Path(path) => format!("path:{}", normalized_path(path)),
+        }
+    }
+}
+
+#[cfg(windows)]
+#[derive(Default)]
+struct StableHasher(u64);
+
+#[cfg(windows)]
+impl Hasher for StableHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.0 = if self.0 == 0 {
+            0xcbf29ce484222325
+        } else {
+            self.0
+        };
+        for byte in bytes {
+            self.0 ^= u64::from(*byte);
+            self.0 = self.0.wrapping_mul(0x100000001b3);
+        }
+    }
+}
+
+#[cfg(unix)]
+fn metadata_change_time(metadata: &Metadata) -> Option<SystemTime> {
+    system_time_from_unix_parts(metadata.ctime(), metadata.ctime_nsec())
+}
+
+#[cfg(not(unix))]
+fn metadata_change_time(_: &Metadata) -> Option<SystemTime> {
+    None
+}
+
+#[cfg(unix)]
+fn system_time_from_unix_parts(seconds: i64, nanoseconds: i64) -> Option<SystemTime> {
+    let nanoseconds = u32::try_from(nanoseconds).ok()?;
+    if seconds >= 0 {
+        UNIX_EPOCH.checked_add(Duration::new(seconds as u64, nanoseconds))
+    } else if nanoseconds == 0 {
+        UNIX_EPOCH.checked_sub(Duration::new(seconds.unsigned_abs(), 0))
+    } else {
+        UNIX_EPOCH.checked_sub(Duration::new(
+            seconds.unsigned_abs() - 1,
+            1_000_000_000 - nanoseconds,
+        ))
     }
 }
 
@@ -115,6 +185,14 @@ pub struct ScanReport {
     pub excluded_files: usize,
     pub below_min_size_files: usize,
     pub errors: Vec<ScanError>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ScanOptions {
+    pub min_size: Option<u64>,
+    pub exclude: Vec<String>,
+    pub max_depth: Option<usize>,
+    pub one_file_system: bool,
 }
 
 impl ScanReport {
@@ -203,8 +281,20 @@ impl ExcludePatterns {
     }
 }
 
+#[allow(dead_code)]
 pub fn scan_dir(path: PathBuf, min_size: Option<u64>, exclude: &[String]) -> Result<ScanReport> {
-    let exclusions = ExcludePatterns::new(exclude)?;
+    scan_dir_with_options(
+        path,
+        ScanOptions {
+            min_size,
+            exclude: exclude.to_vec(),
+            ..ScanOptions::default()
+        },
+    )
+}
+
+pub fn scan_dir_with_options(path: PathBuf, options: ScanOptions) -> Result<ScanReport> {
+    let exclusions = ExcludePatterns::new(&options.exclude)?;
     let mut report = ScanReport {
         files: Vec::new(),
         excluded_files: 0,
@@ -212,7 +302,15 @@ pub fn scan_dir(path: PathBuf, min_size: Option<u64>, exclude: &[String]) -> Res
         errors: Vec::new(),
     };
 
-    for item in WalkDir::new(&path) {
+    let mut walker = WalkDir::new(&path);
+    if let Some(max_depth) = options.max_depth {
+        walker = walker.max_depth(max_depth);
+    }
+    if options.one_file_system {
+        walker = walker.same_file_system(true);
+    }
+
+    for item in walker {
         let entry = match item {
             Ok(entry) => entry,
             Err(error) => {
@@ -242,7 +340,10 @@ pub fn scan_dir(path: PathBuf, min_size: Option<u64>, exclude: &[String]) -> Res
             }
         };
 
-        if min_size.is_some_and(|minimum| metadata.len() < minimum) {
+        if options
+            .min_size
+            .is_some_and(|minimum| metadata.len() < minimum)
+        {
             report.below_min_size_files += 1;
             continue;
         }
@@ -357,6 +458,62 @@ mod tests {
         assert_eq!(report.files.len(), 2);
         assert_eq!(report.excluded_files, 1);
         assert!(!report.files.iter().any(|file| file.path == file2));
+    }
+
+    #[test]
+    fn max_depth_limits_recursive_traversal() {
+        let dir = tempdir().unwrap();
+        let root_file = dir.path().join("root.txt");
+        let nested_dir = dir.path().join("nested");
+        let nested_file = nested_dir.join("nested.txt");
+        let deep_dir = nested_dir.join("deep");
+        let deep_file = deep_dir.join("deep.txt");
+        fs::create_dir_all(&deep_dir).unwrap();
+        fs::write(&root_file, b"root").unwrap();
+        fs::write(&nested_file, b"nested").unwrap();
+        fs::write(&deep_file, b"deep").unwrap();
+
+        let report = scan_dir_with_options(
+            dir.path().to_path_buf(),
+            ScanOptions {
+                max_depth: Some(1),
+                ..ScanOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert!(report.files.iter().any(|file| file.path == root_file));
+        assert!(!report.files.iter().any(|file| file.path == nested_file));
+        assert!(!report.files.iter().any(|file| file.path == deep_file));
+
+        let root_only = scan_dir_with_options(
+            dir.path().to_path_buf(),
+            ScanOptions {
+                max_depth: Some(0),
+                ..ScanOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(root_only.files.is_empty());
+    }
+
+    #[test]
+    #[cfg(any(unix, windows))]
+    fn one_file_system_keeps_regular_tree_scans_complete() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("file.txt"), b"content").unwrap();
+
+        let report = scan_dir_with_options(
+            dir.path().to_path_buf(),
+            ScanOptions {
+                one_file_system: true,
+                ..ScanOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert!(report.is_complete());
+        assert_eq!(report.files.len(), 1);
     }
 
     #[test]

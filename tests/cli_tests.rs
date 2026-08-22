@@ -180,8 +180,120 @@ fn test_json_output_contains_only_json() -> Result<(), Box<dyn std::error::Error
     let output = cmd.arg("scan").arg(dir.path()).arg("--json").output()?;
     assert!(output.status.success());
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["application_version"], env!("CARGO_PKG_VERSION"));
     assert!(json.get("summary").is_some());
+    assert_eq!(json["cache"]["enabled"], true);
     assert!(output.stderr.is_empty());
+    Ok(())
+}
+
+#[test]
+fn repeated_scans_reuse_the_persistent_hash_cache() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let cache_dir = tempdir()?;
+    fs::write(dir.path().join("first.txt"), "duplicate")?;
+    fs::write(dir.path().join("second.txt"), "duplicate")?;
+
+    let first = Command::cargo_bin("dedup")?
+        .env("DEDUP_CACHE_DIR", cache_dir.path())
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--json")
+        .output()?;
+    assert!(first.status.success());
+    let first_json: serde_json::Value = serde_json::from_slice(&first.stdout)?;
+    assert_eq!(first_json["cache"]["partial_misses"], 2);
+    assert_eq!(first_json["cache"]["full_misses"], 2);
+
+    let second = Command::cargo_bin("dedup")?
+        .env("DEDUP_CACHE_DIR", cache_dir.path())
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--json")
+        .output()?;
+    assert!(second.status.success());
+    let second_json: serde_json::Value = serde_json::from_slice(&second.stdout)?;
+    assert_eq!(second_json["cache"]["partial_hits"], 2);
+    assert_eq!(second_json["cache"]["full_hits"], 2);
+    assert_eq!(second_json["duplicate_groups"].as_array().unwrap().len(), 1);
+    Ok(())
+}
+
+#[test]
+fn changed_files_invalidate_cached_hashes() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let cache_dir = tempdir()?;
+    let first = dir.path().join("first.txt");
+    let second = dir.path().join("second.txt");
+    fs::write(&first, "duplicate")?;
+    fs::write(&second, "duplicate")?;
+
+    let initial = Command::cargo_bin("dedup")?
+        .env("DEDUP_CACHE_DIR", cache_dir.path())
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--json")
+        .output()?;
+    assert!(initial.status.success());
+
+    fs::write(&first, "different")?;
+    let changed = Command::cargo_bin("dedup")?
+        .env("DEDUP_CACHE_DIR", cache_dir.path())
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--json")
+        .output()?;
+    assert!(changed.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&changed.stdout)?;
+    assert!(json["cache"]["invalidated_entries"].as_u64().unwrap() >= 1);
+    assert!(json["duplicate_groups"].as_array().unwrap().is_empty());
+    Ok(())
+}
+
+#[test]
+fn no_cache_disables_persistent_hash_storage() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let cache_dir = tempdir()?;
+    fs::write(dir.path().join("first.txt"), "duplicate")?;
+    fs::write(dir.path().join("second.txt"), "duplicate")?;
+
+    let output = Command::cargo_bin("dedup")?
+        .env("DEDUP_CACHE_DIR", cache_dir.path())
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--json")
+        .arg("--no-cache")
+        .output()?;
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["cache"]["enabled"], false);
+    assert!(!cache_dir.path().join("file-deduplicator").exists());
+    Ok(())
+}
+
+#[test]
+fn max_depth_limits_cli_scans() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let nested = dir.path().join("nested");
+    fs::create_dir(&nested)?;
+    fs::write(dir.path().join("first.txt"), "duplicate")?;
+    fs::write(dir.path().join("second.txt"), "duplicate")?;
+    fs::write(nested.join("first.txt"), "nested")?;
+    fs::write(nested.join("second.txt"), "nested")?;
+
+    let output = Command::cargo_bin("dedup")?
+        .arg("scan")
+        .arg(dir.path())
+        .arg("--json")
+        .arg("--max-depth")
+        .arg("1")
+        .arg("--no-cache")
+        .output()?;
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["summary"]["files_scanned"], 2);
+    assert_eq!(json["duplicate_groups"].as_array().unwrap().len(), 1);
     Ok(())
 }
 

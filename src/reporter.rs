@@ -39,6 +39,18 @@ pub fn report_scan_summary(scan: &ScanReport, duplicates: &DuplicateResult) {
         summary.hash_failures
     );
 
+    if duplicates.cache.enabled {
+        eprintln!(
+            "Hash cache: {} partial hits, {} partial misses, {} full hits, {} full misses, {} invalidated, {} pruned.",
+            duplicates.cache.partial_hits,
+            duplicates.cache.partial_misses,
+            duplicates.cache.full_hits,
+            duplicates.cache.full_misses,
+            duplicates.cache.invalidated_entries,
+            duplicates.cache.pruned_entries
+        );
+    }
+
     for error in &scan.errors {
         let path = error
             .path
