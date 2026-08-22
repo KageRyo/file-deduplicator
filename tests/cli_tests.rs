@@ -1,12 +1,20 @@
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
 
+fn dedup_command(cache_dir: &Path) -> Result<Command, Box<dyn std::error::Error>> {
+    let mut command = Command::cargo_bin("dedup")?;
+    command.env("DEDUP_CACHE_DIR", cache_dir);
+    Ok(command)
+}
+
 #[test]
 fn test_scan_invalid_size() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let cache_dir = tempdir()?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     cmd.arg("scan").arg(".").arg("--min-size").arg("hello");
     cmd.assert()
         .failure()
@@ -17,12 +25,13 @@ fn test_scan_invalid_size() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_scan_basic() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     let f1 = dir.path().join("f1.txt");
     let f2 = dir.path().join("f2.txt");
     fs::write(&f1, "dup")?;
     fs::write(&f2, "dup")?;
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     cmd.arg("scan").arg(dir.path());
     cmd.assert()
         .success()
@@ -46,10 +55,11 @@ fn test_shell_completions_generate_for_supported_shells() -> Result<(), Box<dyn 
 #[test]
 fn test_threads_option_requires_a_positive_value() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     fs::write(dir.path().join("f1.txt"), "dup")?;
     fs::write(dir.path().join("f2.txt"), "dup")?;
 
-    let mut valid = Command::cargo_bin("dedup")?;
+    let mut valid = dedup_command(cache_dir.path())?;
     valid
         .arg("scan")
         .arg(dir.path())
@@ -58,7 +68,7 @@ fn test_threads_option_requires_a_positive_value() -> Result<(), Box<dyn std::er
         .assert()
         .success();
 
-    let mut invalid = Command::cargo_bin("dedup")?;
+    let mut invalid = dedup_command(cache_dir.path())?;
     invalid
         .arg("scan")
         .arg(dir.path())
@@ -73,12 +83,13 @@ fn test_threads_option_requires_a_positive_value() -> Result<(), Box<dyn std::er
 #[test]
 fn test_delete_dry_run() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     let f1 = dir.path().join("f1.txt");
     let f2 = dir.path().join("f2.txt");
     fs::write(&f1, "dup")?;
     fs::write(&f2, "dup")?;
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     cmd.arg("delete").arg(dir.path()).arg("--dry-run");
     cmd.assert()
         .success()
@@ -102,13 +113,14 @@ fn test_version_uses_package_version() -> Result<(), Box<dyn std::error::Error>>
 #[test]
 fn test_move_dry_run_does_not_modify_filesystem() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     let destination = dir.path().join("backup");
     let f1 = dir.path().join("f1.txt");
     let f2 = dir.path().join("f2.txt");
     fs::write(&f1, "dup")?;
     fs::write(&f2, "dup")?;
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     cmd.arg("move")
         .arg(dir.path())
         .arg("--to")
@@ -127,12 +139,13 @@ fn test_move_dry_run_does_not_modify_filesystem() -> Result<(), Box<dyn std::err
 #[test]
 fn test_trash_dry_run_does_not_modify_filesystem() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     let f1 = dir.path().join("f1.txt");
     let f2 = dir.path().join("f2.txt");
     fs::write(&f1, "dup")?;
     fs::write(&f2, "dup")?;
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     cmd.arg("trash")
         .arg(dir.path())
         .arg("--dry-run")
@@ -148,6 +161,7 @@ fn test_trash_dry_run_does_not_modify_filesystem() -> Result<(), Box<dyn std::er
 #[test]
 fn test_move_accepts_keep_policy() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     let destination = dir.path().join("backup");
     let old = dir.path().join("old.txt");
     let new = dir.path().join("new.txt");
@@ -155,7 +169,7 @@ fn test_move_accepts_keep_policy() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::sleep(std::time::Duration::from_millis(100));
     fs::write(&new, "dup")?;
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     cmd.arg("move")
         .arg(dir.path())
         .arg("--to")
@@ -173,10 +187,11 @@ fn test_move_accepts_keep_policy() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_json_output_contains_only_json() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     fs::write(dir.path().join("f1.txt"), "dup")?;
     fs::write(dir.path().join("f2.txt"), "dup")?;
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     let output = cmd.arg("scan").arg(dir.path()).arg("--json").output()?;
     assert!(output.status.success());
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
@@ -300,9 +315,10 @@ fn max_depth_limits_cli_scans() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn incomplete_scan_returns_a_distinct_exit_code() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     let missing = dir.path().join("missing");
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     let output = cmd.arg("scan").arg(&missing).arg("--json").output()?;
 
     assert_eq!(output.status.code(), Some(2));
@@ -314,9 +330,10 @@ fn incomplete_scan_returns_a_distinct_exit_code() -> Result<(), Box<dyn std::err
 #[test]
 fn destructive_commands_refuse_incomplete_scans() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempdir()?;
+    let cache_dir = tempdir()?;
     let missing = dir.path().join("missing");
 
-    let mut cmd = Command::cargo_bin("dedup")?;
+    let mut cmd = dedup_command(cache_dir.path())?;
     cmd.arg("delete").arg(&missing).arg("--confirm");
     cmd.assert()
         .failure()
